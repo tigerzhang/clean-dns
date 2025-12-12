@@ -1,0 +1,16 @@
+bind: "127.0.0.1:5335"
+entry: main
+plugins:
+  - tag: forward_doh
+    type: forward
+    args:
+      upstreams:
+        - "https://8.8.8.8/dns-query" # DoH
+        - "1.1.1.1:53" # UDP
+      concurrent: 2
+
+  - tag: main
+    type: sequence
+    args:
+      exec:
+        - forward_doh

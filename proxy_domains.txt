@@ -1,0 +1,12 @@
+google.com
+github.com
+youtube.com
+twitter.com
+facebook.com
+x.com
+t.co
+youtu.be
+googlevideo.com
+githubusercontent.com
+fbcdn.net
+gstatic.com

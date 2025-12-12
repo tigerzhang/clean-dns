@@ -1,0 +1,63 @@
+bind: "127.0.0.1:5335"
+entry: main
+plugins:
+  # --- Data Providers ---
+  - tag: proxy_list
+    type: domain_set
+    args:
+      files:
+        - "proxy_domains.txt"
+
+  # --- Actions ---
+  # 1. Proxy Forwarder (DoH over SOCKS5)
+  - tag: forward_proxy
+    type: forward
+    args:
+      upstreams:
+        - "https://8.8.8.8/dns-query"
+      socks5: "127.0.0.1:1080" # Tunnel DoH through local proxy
+
+  # 2. Default Forwarder (AliDNS for speed in CN)
+  - tag: forward_local
+    type: forward
+    args:
+      upstreams:
+        - "223.5.5.5:53"
+
+  # 3. Control Flow
+  - tag: stop
+    type: return
+    args: {}
+
+  # --- Matchers ---
+  - tag: match_proxy_domains
+    type: matcher
+    args:
+      domain:
+        - "provider:proxy_list"
+
+  # --- Logic ---
+  - tag: routing_logic
+    type: if
+    args:
+      if: "match_proxy_domains"
+      exec:
+        - forward_proxy # Forward to Google via Proxy
+        - stop # Stop processing (don't fall through to local)
+      else_exec: [] # Continue to next step if not matched
+
+  # --- Main Sequence ---
+  - tag: main_sequence
+    type: sequence
+    args:
+      exec:
+        - routing_logic # 1. Check if needs proxy
+        - forward_local # 2. Fallback to local DNS
+
+  # --- Entry Point (Cache) ---
+  - tag: main
+    type: cache
+    args:
+      size: 10000
+      exec:
+        - main_sequence

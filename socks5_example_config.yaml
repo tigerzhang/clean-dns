@@ -1,0 +1,15 @@
+bind: "127.0.0.1:5335"
+entry: main
+plugins:
+  - tag: forward_socks5
+    type: forward
+    args:
+      upstreams:
+        - "8.8.8.8:53"
+      socks5: "127.0.0.1:1080" # Requires a running SOCKS5 proxy
+
+  - tag: main
+    type: sequence
+    args:
+      exec:
+        - forward_socks5
