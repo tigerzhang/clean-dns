@@ -12,6 +12,7 @@ mod server;
 use crate::plugins::cache::Cache;
 use crate::plugins::delay_plugin::DelayPlugin;
 use crate::plugins::domain_set::DomainSetPlugin;
+use crate::plugins::fallback::FallbackPlugin;
 use crate::plugins::forward::Forward;
 use crate::plugins::hosts::Hosts;
 use crate::plugins::if_plugin::IfPlugin;
@@ -20,6 +21,7 @@ use crate::plugins::matcher::Matcher;
 use crate::plugins::reject_plugin::RejectPlugin;
 use crate::plugins::return_plugin::ReturnPlugin;
 use crate::plugins::sequence::Sequence;
+use crate::plugins::ttl::TtlPlugin;
 use crate::plugins::SharedPlugin;
 use crate::server::Server;
 
@@ -59,6 +61,8 @@ async fn main() -> Result<()> {
             "return" => Arc::new(ReturnPlugin::new(plugin_conf.args.as_ref())?),
             "reject" => Arc::new(RejectPlugin::new(plugin_conf.args.as_ref())?),
             "delay" => Arc::new(DelayPlugin::new(plugin_conf.args.as_ref())?),
+            "fallback" => Arc::new(FallbackPlugin::new(plugin_conf.args.as_ref(), &registry)?),
+            "ttl" => Arc::new(TtlPlugin::new(plugin_conf.args.as_ref())?),
             _ => {
                 warn!("Unknown plugin type: {}", type_);
                 continue;

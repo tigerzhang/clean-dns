@@ -1,5 +1,8 @@
 bind: "127.0.0.1:5335"
 entry: main
+log:
+  level: info
+
 plugins:
   # --- Data Providers ---
   - tag: proxy_list
@@ -24,6 +27,13 @@ plugins:
       upstreams:
         - "223.5.5.5:53"
 
+  # Backup Forwarder (Cloudflare)
+  - tag: forward_backup
+    type: forward
+    args:
+      upstreams:
+        - "114.114.114.114:53"
+
   # 3. Control Flow
   - tag: stop
     type: return
@@ -35,6 +45,18 @@ plugins:
     args:
       domain:
         - "provider:proxy_list"
+
+  - tag: fallback_group
+    type: fallback
+    args:
+      primary: forward_local
+      secondary: forward_backup
+
+  - tag: ttl_fix
+    type: ttl
+    args:
+      min: 300
+      max: 600
 
   # --- Logic ---
   - tag: routing_logic
@@ -52,7 +74,8 @@ plugins:
     args:
       exec:
         - routing_logic # 1. Check if needs proxy
-        - forward_local # 2. Fallback to local DNS
+        - fallback_group # 2. Fallback to local DNS (with backup)
+        - ttl_fix
 
   # --- Entry Point (Cache) ---
   - tag: main
@@ -61,3 +84,6 @@ plugins:
       size: 10000
       exec:
         - main_sequence
+server:
+  addr: 127.0.0.1:5353
+  entry: main

@@ -7,6 +7,7 @@ use std::sync::Arc;
 pub mod cache;
 pub mod delay_plugin;
 pub mod domain_set;
+pub mod fallback;
 pub mod forward;
 pub mod hosts;
 pub mod if_plugin;
@@ -15,6 +16,7 @@ pub mod matcher;
 pub mod reject_plugin;
 pub mod return_plugin;
 pub mod sequence;
+pub mod ttl;
 
 /// Context holds the state of a DNS query handling.
 #[derive(Clone)]
