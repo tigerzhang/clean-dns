@@ -12,9 +12,9 @@ CleanDNS is a modular, high-performance DNS forwarder and router written in Rust
   - **DoH (DNS over HTTPS)**: Secure DNS queries.
   - **Race Strategy**: Query multiple upstreams concurrently; fastest wins.
 - **Proxy Support**: Full SOCKS5 support for both UDP and DoH upstream queries.
-- **Logic Control**: `If`, `Sequence`, `Return`, `Reject`, `Delay` plugins to build complex query pipelines.
+- **Logic Control**: `If`, `Sequence`, `Fallback`, `Return`, `Reject`, `Delay` plugins to build complex query pipelines.
 - **Efficient Matching**: Fast domain and IP matching using text files (`domain_set`, `ip_set`).
-- **Caching**: In-memory TTL-based caching.
+- **Caching & TTL**: In-memory caching and TTL modification support.
 - **Static Hosts**: Local hosts file support.
 
 ## Installation
@@ -103,6 +103,8 @@ plugins:
 | `reject`     | Rejects the query.                       | `rcode` (int)                                           |
 | `delay`      | Delays execution (debug/testing).        | `ms` (int)                                              |
 | `return`     | Stops execution in the current sequence. | -                                                       |
+| `fallback`   | Fallback to secondary if primary fails.  | `primary` (list), `secondary` (list)                    |
+| `ttl`        | Modifies response TTL.                   | `min` (int), `max` (int)                                |
 
 ## License
 
