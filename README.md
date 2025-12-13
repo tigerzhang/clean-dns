@@ -22,7 +22,7 @@ CleanDNS is a modular, high-performance DNS forwarder and router written in Rust
 Ensure you have Rust installed.
 
 ```bash
-git clone https://github.com/your-username/clean-dns.git
+git clone https://github.com/tigerzhang/clean-dns.git
 cd clean-dns
 cargo build --release
 ```
