@@ -67,20 +67,47 @@ plugins:
     args:
       upstreams: ["223.5.5.5:53"]
 
-  # 3. Logic Layer
+  - tag: forward_backup
+    type: forward
+    args:
+      upstreams: ["1.1.1.1:53"]
+
+  - tag: stop
+    type: return
+    args: {}
+
+  # 3. Matchers & Helpers
+  - tag: match_proxy_domains
+    type: matcher
+    args:
+      domain: ["provider:proxy_list"]
+
+  - tag: fallback_group
+    type: fallback
+    args:
+      primary: [forward_local]
+      secondary: [forward_backup]
+
+  - tag: ttl_fix
+    type: ttl
+    args:
+      min: 300
+      max: 3600
+
+  # 4. Logic Layer
   - tag: routing
     type: if
     args:
-      if: "match_proxy_domains" # Needs a matcher plugin
+      if: "match_proxy_domains"
       exec: [forward_proxy, stop]
       else_exec: []
 
   - tag: connection_logic
     type: sequence
     args:
-      exec: [routing, forward_local]
+      exec: [routing, fallback_group, ttl_fix]
 
-  # 4. Entry Point (Cache -> Logic)
+  # 5. Entry Point (Cache -> Logic)
   - tag: main
     type: cache
     args:
