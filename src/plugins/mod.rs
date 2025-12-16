@@ -18,6 +18,9 @@ pub mod return_plugin;
 pub mod sequence;
 pub mod ttl;
 
+use crate::statistics::Statistics;
+use std::sync::RwLock;
+
 /// Context holds the state of a DNS query handling.
 #[derive(Clone)]
 pub struct Context {
@@ -25,15 +28,17 @@ pub struct Context {
     pub request: Message,
     pub response: Option<Message>,
     pub abort: bool,
+    pub stats: Arc<RwLock<Statistics>>,
 }
 
 impl Context {
-    pub fn new(client_addr: SocketAddr, request: Message) -> Self {
+    pub fn new(client_addr: SocketAddr, request: Message, stats: Arc<RwLock<Statistics>>) -> Self {
         Self {
             client_addr,
             request,
             response: None,
             abort: false,
+            stats,
         }
     }
 }

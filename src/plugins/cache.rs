@@ -85,6 +85,17 @@ impl Plugin for Cache {
                     response.set_id(ctx.request.id()); // Update ID to match request
                     ctx.response = Some(response);
                     info!("Cache hit for {}", k);
+                    {
+                        let mut stats = ctx.stats.write().unwrap();
+                        // k is the key, which contains domain.
+                        // But wait, `get_key` includes query type and class. "google.com.-A-IN".
+                        // Logic in `Statistics` expects domain name "google.com.".
+                        // I should extract domain from request or parse key.
+                        // `ctx.request` is available.
+                        if let Some(query) = ctx.request.query() {
+                            stats.record_cache_hit(query.name().to_string());
+                        }
+                    }
                     return Ok(());
                 } else {
                     cache.remove(k);

@@ -16,6 +16,7 @@ CleanDNS is a modular, high-performance DNS forwarder and router written in Rust
 - **Efficient Matching**: Fast domain and IP matching using text files (`domain_set`, `ip_set`).
 - **Caching & TTL**: In-memory caching and TTL modification support.
 - **Static Hosts**: Local hosts file support.
+- **Statistics API**: Built-in HTTP API to monitor query counts, cache hits, and resolved IPs.
 
 ## Installation
 
@@ -47,6 +48,7 @@ See `config.yaml` for a full example that routes Google/GitHub via a SOCKS5 prox
 
 ```yaml
 bind: "127.0.0.1:5335"
+api_port: 3002 # Optional: Port for the Statistics API (default: 3000)
 entry: main
 plugins:
   # 1. Define Data Sources
@@ -136,3 +138,33 @@ plugins:
 ## License
 
 MIT
+
+## Statistics API
+
+CleanDNS includes a built-in HTTP API to view runtime statistics.
+By default, it listens on port `3000` (configurable via `api_port` in `config.yaml`).
+
+### Endpoint: `GET /stats`
+
+Returns a JSON object containing usage statistics per domain.
+
+**Response Example:**
+
+```json
+{
+  "domains": {
+    "google.com.": {
+      "count": 12,
+      "last_resolved_at": "2023-10-27T10:00:00Z",
+      "ips": ["142.250.1.100", "142.250.1.101"],
+      "cache_hits": 5
+    },
+    "github.com.": {
+      "count": 3,
+      "last_resolved_at": "2023-10-27T10:05:00Z",
+      "ips": ["140.82.112.4"],
+      "cache_hits": 0
+    }
+  }
+}
+```

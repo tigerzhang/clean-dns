@@ -1,0 +1,61 @@
+use chrono::{DateTime, Utc};
+use serde::Serialize;
+use std::collections::{HashMap, HashSet};
+use std::net::IpAddr;
+
+#[derive(Debug, Default, Serialize, Clone)]
+pub struct Statistics {
+    pub domains: HashMap<String, DomainStats>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct DomainStats {
+    pub count: usize,
+    pub last_resolved_at: DateTime<Utc>,
+    pub ips: HashSet<IpAddr>,
+    pub cache_hits: usize,
+}
+
+impl Statistics {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn record_request(&mut self, domain: String) {
+        let entry = self.domains.entry(domain).or_insert(DomainStats {
+            count: 0,
+            last_resolved_at: Utc::now(),
+            ips: HashSet::new(),
+            cache_hits: 0,
+        });
+        entry.count += 1;
+        entry.last_resolved_at = Utc::now();
+    }
+
+    pub fn record_cache_hit(&mut self, domain: String) {
+        if let Some(entry) = self.domains.get_mut(&domain) {
+            entry.cache_hits += 1;
+        } else {
+            // Should not happen if request recorded first, but if cache hit happens before request record?
+            // In current logic: request recorded first.
+            // But strict cache hit might bypass request record if I change order?
+            // In `server.rs`, `record_request` is called before `plugin.next`.
+            // In `cache.rs`, `next` calls `record_cache_hit`.
+            // So entry should exist.
+            // Safety: insert if not exists (though resolved time might be slightly off, or just use now)
+            let entry = self.domains.entry(domain).or_insert(DomainStats {
+                count: 0, // Did we count it as request? Yes, explicit record_request called in server.
+                last_resolved_at: Utc::now(),
+                ips: HashSet::new(),
+                cache_hits: 0,
+            });
+            entry.cache_hits += 1;
+        }
+    }
+
+    pub fn record_resolved_ip(&mut self, domain: &str, ip: IpAddr) {
+        if let Some(entry) = self.domains.get_mut(domain) {
+            entry.ips.insert(ip);
+        }
+    }
+}

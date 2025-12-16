@@ -3,11 +3,13 @@ use clap::Parser;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
+mod api;
 mod config;
 mod plugins;
 mod server;
+mod statistics;
 
 use crate::plugins::cache::Cache;
 use crate::plugins::delay_plugin::DelayPlugin;
@@ -24,6 +26,8 @@ use crate::plugins::sequence::Sequence;
 use crate::plugins::ttl::TtlPlugin;
 use crate::plugins::SharedPlugin;
 use crate::server::Server;
+use crate::statistics::Statistics;
+use std::sync::RwLock;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -74,14 +78,10 @@ async fn main() -> Result<()> {
 
     let entry_plugin = if config.entry.is_empty() {
         warn!("No entry plugin specified, using 'main' or the last loaded one");
-        // Fallback logic
         registry
             .get("main")
             .cloned()
-            .or_else(|| {
-                // If no main, maybe just pick one?
-                None
-            })
+            .or_else(|| None)
             .ok_or_else(|| anyhow::anyhow!("No entry plugin found"))?
     } else {
         registry
@@ -90,8 +90,22 @@ async fn main() -> Result<()> {
             .ok_or_else(|| anyhow::anyhow!("Entry plugin '{}' not found", config.entry))?
     };
 
+    let statistics = Arc::new(RwLock::new(Statistics::new()));
+
+    // Spawn API server if port is provided (assuming default 3000 for now if not in config, but I'll add hardcoded or config based)
+    // The user didn't modify config structure yet. I will assume port 3000 for now or check if I can add it to config.
+    // I'll update config.rs next.
+    // For now, I'll just hardcode 3000 or use a default.
+    let api_port = config.api_port.unwrap_or(3000);
+    let stats_for_api = statistics.clone();
+    tokio::spawn(async move {
+        if let Err(e) = api::start_api_server(stats_for_api, api_port).await {
+            error!("Failed to start API server: {}", e);
+        }
+    });
+
     let bind_addr: SocketAddr = config.bind.parse().context("Invalid bind address")?;
-    let server = Server::new(bind_addr, entry_plugin);
+    let server = Server::new(bind_addr, entry_plugin, statistics);
 
     server.run().await?;
 

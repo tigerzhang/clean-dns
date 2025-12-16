@@ -7,6 +7,8 @@ use std::path::Path;
 pub struct Config {
     pub bind: String,
     pub entry: String,
+    #[serde(default)]
+    pub api_port: Option<u16>,
     pub plugins: Vec<PluginConfig>,
 }
 

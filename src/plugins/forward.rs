@@ -11,7 +11,7 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UdpSocket;
 use tokio_socks::tcp::Socks5Stream;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 #[derive(Deserialize)]
 struct ForwardConfig {
@@ -233,7 +233,7 @@ impl Plugin for Forward {
             Ok((response_bytes, _)) => {
                 let response = Message::from_vec(&response_bytes)?;
                 ctx.response = Some(response);
-                info!("Forwarded request success");
+                debug!("Forwarded request success");
             }
             Err(e) => {
                 warn!("All upstreams failed: {}", e);
