@@ -15,3 +15,19 @@
   - [x] Update `src/config.rs` <!-- id: 13 -->
   - [x] Update `src/main.rs` to spawn API server <!-- id: 14 -->
 - [x] Verify implementation <!-- id: 9 -->
+
+- [ ] Add Tests <!-- id: 15 -->
+  - [ ] Create implementation plan for tests <!-- id: 16 -->
+    - [x] Unit Tests: `src/statistics.rs` <!-- id: 17 -->
+      - [x] Test `record_request` inserts/updates correctly <!-- id: 18 -->
+      - [x] Test `record_resolved_ip` keeps unique IPs <!-- id: 19 -->
+      - [x] Test `record_cache_hit` increments correctly <!-- id: 20 -->
+    - [x] Unit Tests: Plugins <!-- id: 26 -->
+      - [x] Matcher Plugin <!-- id: 27 -->
+      - [x] Cache Plugin <!-- id: 28 -->
+      - [x] Forward, Sequence, If, IP/Domain Set, Hosts, Reject, Return, Delay, Fallback, TTL <!-- id: 29 -->
+    - [x] Integration Tests: `tests/integration.rs` <!-- id: 21 -->
+      - [x] Setup test server environment <!-- id: 22 -->
+      - [x] Test API endpoint returns valid JSON <!-- id: 23 -->
+      - [x] Test DNS query updates stats <!-- id: 24 -->
+  - [x] Run `cargo test` and ensure all pass <!-- id: 25 -->

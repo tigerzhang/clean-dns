@@ -65,3 +65,28 @@ This confirms all requirements:
 3. Request count included.
 4. Cache hit count included.
 5. Latest timestamp included.
+
+## Automated Testing
+
+Comprehensive unit and integration tests have been implemented to ensure stability.
+
+### Unit Tests
+
+- `src/statistics.rs`: Verifies data logic (inserts, updates, concurrency).
+- `src/plugins/*`: Unit tests for all plugins (Cache, Matcher, Forward, Sequence, etc.) covering config parsing and core logic.
+
+### Integration Tests
+
+- `tests/integration_test.rs`:
+  - **Server + Stats**: Verifies that a real DNS query via UDP updates the shared statistics and is served correctly.
+  - **API Stats**: Verifies that the HTTP API endpoint (`GET /stats`) returns valid JSON with the expected structure.
+
+### Running Tests
+
+To run all tests:
+
+```bash
+cargo test
+```
+
+Result: All 21 tests passed (19 unit, 2 integration).

@@ -1,39 +1,49 @@
-# Data Provider Plugins Implementation Plan
+# Add Unit and Integration Tests
 
-We will implement `domain_set` and `ip_set` plugins to support `mosdns`-style data providers.
+## Goal
+Add comprehensive testing to ensure reliability of statistics and server functionality.
 
 ## Proposed Changes
 
-### [MODIFY] [src/plugins/mod.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs)
-- Update [Plugin](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#33-41) trait to include data provider methods:
-    ```rust
-    fn as_domain_set(&self) -> Option<&dyn DomainSet>;
-    fn as_ip_set(&self) -> Option<&dyn IpSet>;
-    ```
-    (Or simply `match_domain` / `match_ip` methods directly on [Plugin](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#33-41) trait with default implementation `false`).
-    *Decision*: Let's use specific traits `DomainSet` and `IpSet` and casting/accessors to keep [Plugin](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#33-41) clean.
+### [REFAC] Refactor to Library Structure
+To support `tests/` integration tests, we need to expose modules via `lib.rs`.
 
-### [NEW] [src/plugins/domain_set.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/domain_set.rs)
-- Loads domains from text files (one domain per line).
-- Implements `DomainSet` trait: `contains(&self, domain: &str) -> bool`.
-- Optimized using `HashSet` or `AhoCorasick` / Tree for suffix matching. For now, checking suffix manually or specific crate.
+#### [NEW] [src/lib.rs](file:///Users/zhanghu/vpn/clean-dns/src/lib.rs)
+- Expose modules: [api](file:///Users/zhanghu/vpn/clean-dns/src/api.rs#9-20), `config`, `plugins`, [server](file:///Users/zhanghu/vpn/clean-dns/src/api.rs#9-20), `statistics`.
+- Re-export necessary types.
 
-### [NEW] [src/plugins/ip_set.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/ip_set.rs)
-- Loads IPs/CIDRs from text files.
-- Implements `IpSet` trait: `contains(&self, ip: IpAddr) -> bool`.
-- Uses `ipnet` crate for CIDR matching.
+#### [MODIFY] [src/main.rs](file:///Users/zhanghu/vpn/clean-dns/src/main.rs)
+- Reduce to a thin wrapper that calls `clean_dns::...`.
+- Use `clean_dns::config::Config`, `clean_dns::server::Server`, etc.
 
-### [MODIFY] [src/plugins/matcher.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/matcher.rs)
-- Update config to parsing `domain` entries.
-- If entry starts with `provider:`, assert that plugin exists and implements `DomainSet`.
-- Store references (Arc) to these providers.
-- In [matches()](file:///Users/zhanghu/vpn/clean-dns/src/plugins/matcher.rs#50-67), check these providers.
+### [NEW] Unit Tests
+#### [MODIFY] [src/statistics.rs](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs)
+- Add `#[cfg(test)] mod tests { ... }`.
+- Test [record_request](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs#24-34): verify count and timestamp update.
+- Test [record_resolved_ip](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs#56-61): verify IP set growth and uniqueness.
+- Test [record_cache_hit](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs#35-55): verify count increment.
 
-### [MODIFY] [Config & Main]
-- Register new plugins.
+### [NEW] Integration Tests
+#### [NEW] [tests/integration.rs](file:///Users/zhanghu/vpn/clean-dns/tests/integration.rs)
+- Test suite using `tokio::test`.
+- Helper to start server on random/test ports.
+- Test 1: **API Stats**:
+    - Start server.
+    - Call `GET /stats`.
+    - Assert empty/initial stats.
+- Test 2: **DNS Query + Stats**:
+    - Start server.
+    - Send DNS query (using `hickory-client` or raw socket).
+    - Assert response is valid.
+    - Call `GET /stats`.
+    - Assert stats reflect the query (count=1, domain correct).
 
-## Verification
-- Create `domain_list.txt` and `ip_list.txt`.
-- Configure `domain_set` and `ip_set` loading these files.
-- Configure `matcher` to use `provider:my_domain_set`.
-- Run `dig` to verify matching.
+### [MODIFY] [Cargo.toml](file:///Users/zhanghu/vpn/clean-dns/Cargo.toml)
+- Add `reqwest` to dev-dependencies (blocking or async, needed for API test).
+- Add `tokio` with `test-util` feature? It has `full`.
+
+## Verification Plan
+
+### Automated Tests
+- Run `cargo test`.
+- Verify all unit and integration tests pass.

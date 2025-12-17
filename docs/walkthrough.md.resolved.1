@@ -1,32 +1,87 @@
-# CleanDNS Verification Walkthrough
+# Walkthrough - Statistics Support
 
-## Verification Steps
+I have implemented statistics collection and an API endpoint for the DNS server.
 
-1.  **Build**: ran `cargo check` and `cargo run`.
-2.  **Server Start**: `clean-dns` started successfully on `127.0.0.1:5335`.
-3.  **Core Plugins Verification**:
-    -   **Forward**: Resolved `google.com` (via 8.8.8.8).
-    -   **Matcher**: Verified `google.com` match and `example.com` miss (timeout).
-    -   **Hosts**: Resolved `myserver.local` to `192.168.1.100`.
-    -   **Cache**:
-        -   First query `google.com`: ~7ms (Forwarded).
-        -   Second query `google.com`: 0ms (Cache hit).
+## Changes
 
-## Artifacts
+### 1. Data Structure ([src/statistics.rs](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs))
 
--   `clean-dns` binary (debug build).
--   [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml) with chain: Listen -> Hosts -> Cache -> [Forward].
+Added [Statistics](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs#7-10) struct to track:
 
-## Implemented Plugins
+- `domains`: Map of domain names to [DomainStats](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs#12-18).
+- [DomainStats](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs#12-18):
+  - `count`: Number of queries.
+  - `last_resolved_at`: Timestamp of last query.
+  - `ips`: Set of resolved IP addresses for the domain.
+  - `cache_hits`: Number of cache hits for the domain.
 
--   `sequence`: Chain execution.
--   `forward`: Upstream forwarding.
--   `matcher`: Domain-based routing.
--   `hosts`: Local static mapping.
--   `cache`: In-memory TTL caching.
+### 2. API Endpoint ([src/api.rs](file:///Users/zhanghu/vpn/clean-dns/src/api.rs))
 
-## Next Steps
+- Implemented an Axum-based HTTP server.
+- Endpoint: `GET /stats` returns the current statistics in JSON format.
+- Port is configurable via [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml) (default `3000`).
 
--   Add specific "Response Matcher" or "Query Matcher" for advanced filtering.
--   Implement logic for IP matching (GeoIP, IPSet).
--   Add `fallback` plugin for high availability.
+### 3. Integration
+
+- **Server ([src/server.rs](file:///Users/zhanghu/vpn/clean-dns/src/server.rs))**:
+  - Initializes shared statistics.
+  - Records incoming requests (domain, count, timestamp).
+  - Records resolved IPs from responses.
+- **Cache Plugin ([src/plugins/cache.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/cache.rs))**:
+  - Records cache hits for specific domains.
+- **Context ([src/plugins/mod.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs))**:
+  - Passes shared statistics to plugins.
+
+## Verification Results
+
+### Test Run
+
+Ran [verify.sh](file:///Users/zhanghu/vpn/clean-dns/verify.sh) which:
+
+1. Starts the server on port `5336` (API on `3002`).
+2. Digs `apple.com` (Miss -> Cache).
+3. Digs `apple.com` again (Hit).
+4. Fetches `/stats`.
+
+### Output
+
+```json
+{
+  "domains": {
+    "apple.com.": {
+      "count": 2,
+      "last_resolved_at": "...",
+      "ips": ["17.253.144.10"],
+      "cache_hits": 1
+    }
+  }
+}
+```
+
+This confirms all requirements:
+
+1. Domain names included.
+2. IPs resolved included (per domain).
+3. Request count included.
+4. Cache hit count included.
+5. Latest timestamp included.
+
+## Automated Testing
+
+Comprehensive unit and integration tests have been implemented to ensure stability.
+
+### Unit Tests
+- [src/statistics.rs](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs): Verifies data logic (inserts, updates, concurrency).
+- `src/plugins/*`: Unit tests for all plugins (Cache, Matcher, Forward, Sequence, etc.) covering config parsing and core logic.
+
+### Integration Tests
+- `tests/integration_test.rs`:
+  - **Server + Stats**: Verifies that a real DNS query via UDP updates the shared statistics and is served correctly.
+  - **API Stats**: Verifies that the HTTP API endpoint (`GET /stats`) returns valid JSON with the expected structure.
+
+### Running Tests
+To run all tests:
+```bash
+cargo test
+```
+Result: All 21 tests passed (19 unit, 2 integration).

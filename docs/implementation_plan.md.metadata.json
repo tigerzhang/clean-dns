@@ -1,5 +1,6 @@
 {
   "artifactType": "ARTIFACT_TYPE_IMPLEMENTATION_PLAN",
-  "summary": "Add statistics support to CleanDNS.\n- Create `src/statistics.rs` for `Statistics` struct.\n- Integrate `Statistics` into `Context` to allow sharing across plugins and server.\n- Update `Server` to initialize stats and record request metrics (domain, timestamp) and response metrics (IPs).\n- Update `Cache` plugin to record cache hits.\n- Add thread-safety using `Arc<RwLock<Statistics>>`.",
-  "updatedAt": "2025-12-16T12:44:52.743408Z"
+  "summary": "Add Unit and Integration Tests. Refactor to `lib.rs` to support `tests/` folder.\n- Unit Tests: `src/statistics.rs`.\n- Integration Tests: `tests/integration.rs`.\n- Refactor: Move logic from `main.rs` to `lib.rs`.",
+  "updatedAt": "2025-12-17T14:51:46.956003Z",
+  "version": "2"
 }

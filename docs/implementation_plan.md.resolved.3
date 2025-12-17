@@ -1,30 +1,74 @@
-# IPSet Usage Implementation Plan
+# Add Unit and Integration Tests
 
-To support using [ip_set](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#55-58), we will enhance the [Matcher](file:///Users/zhanghu/vpn/clean-dns/src/plugins/matcher.rs#17-22) plugin.
+## Goal
+
+Add comprehensive testing to ensure reliability of statistics and server functionality.
 
 ## Proposed Changes
 
-### [MODIFY] [src/plugins/matcher.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/matcher.rs)
-- Add `client_ip` to [MatcherConfig](file:///Users/zhanghu/vpn/clean-dns/src/plugins/matcher.rs#10-16).
-- Support `provider:tag` in `client_ip` list.
-- Implement matching logic using `ctx.client_addr.ip()`.
+### [REFAC] Refactor to Library Structure
 
-## Config Example
-```yaml
-plugins:
-  - tag: lan_ip
-    type: ip_set
-    args:
-        files: ["lan.txt"]
+To support `tests/` integration tests, we need to expose modules via `lib.rs`.
 
-  - tag: match_lan
-    type: matcher
-    args:
-        client_ip: ["provider:lan_ip"]
-        exec: ["forward_local"]
-```
+#### [NEW] [src/lib.rs](file:///Users/zhanghu/vpn/clean-dns/src/lib.rs)
 
-## Verification
-- Create `lan.txt` with `127.0.0.1`.
-- Update [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml) to match local client IP and forward to a specific upstream (or reject).
-- Run `dig` (which uses 127.0.0.1) and verify it hits the rule.
+- Expose modules: [api](file:///Users/zhanghu/vpn/clean-dns/src/api.rs#9-20), `config`, `plugins`, [server](file:///Users/zhanghu/vpn/clean-dns/src/api.rs#9-20), `statistics`.
+- Re-export necessary types.
+
+#### [MODIFY] [src/main.rs](file:///Users/zhanghu/vpn/clean-dns/src/main.rs)
+
+- Reduce to a thin wrapper that calls `clean_dns::...`.
+- Use `clean_dns::config::Config`, `clean_dns::server::Server`, etc.
+
+### [NEW] Unit Tests
+
+#### [MODIFY] [src/statistics.rs](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs)
+
+- Add `#[cfg(test)] mod tests { ... }`.
+- Test [record_request](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs#24-34): verify count and timestamp update.
+- Test [record_resolved_ip](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs#56-61): verify IP set growth and uniqueness.
+- Test [record_cache_hit](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs#35-55): verify count increment.
+
+#### [MODIFY] [src/plugins/forward.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/forward.rs)
+
+- Test config parsing.
+- (Mocking network might be hard, maybe just test config/initialization).
+
+#### [MODIFY] [src/plugins/matcher.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/matcher.rs)
+
+- Test domain matching logic (exact, suffix).
+- Test with simple [Context](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#26-33).
+
+#### [MODIFY] [src/plugins/cache.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/cache.rs)
+
+- Test [get_key](file:///Users/zhanghu/vpn/clean-dns/src/plugins/cache.rs#58-69).
+- Test cache hit/miss logic (requires mocking plugin chain or using empty chain).
+
+### [NEW] Integration Tests
+
+#### [NEW] [tests/integration.rs](file:///Users/zhanghu/vpn/clean-dns/tests/integration.rs)
+
+- Test suite using `tokio::test`.
+- Helper to start server on random/test ports.
+- Test 1: **API Stats**:
+  - Start server.
+  - Call `GET /stats`.
+  - Assert empty/initial stats.
+- Test 2: **DNS Query + Stats**:
+  - Start server.
+  - Send DNS query (using `hickory-client` or raw socket).
+  - Assert response is valid.
+  - Call `GET /stats`.
+  - Assert stats reflect the query (count=1, domain correct).
+
+### [MODIFY] [Cargo.toml](file:///Users/zhanghu/vpn/clean-dns/Cargo.toml)
+
+- Add `reqwest` to dev-dependencies (blocking or async, needed for API test).
+- Add `tokio` with `test-util` feature? It has `full`.
+
+## Verification Plan
+
+### Automated Tests
+
+- Run `cargo test`.
+- Verify all unit and integration tests pass.
