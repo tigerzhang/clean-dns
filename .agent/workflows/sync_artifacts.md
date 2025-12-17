@@ -12,11 +12,11 @@ description: "Syncs the implementation plan, task list, and walkthrough artifact
    // turbo
 
    ```bash
-   cp /Users/zhanghu/.gemini/antigravity/brain/625eb765-0296-4916-aa79-17774c92a05d/{implementation_plan.md,task.md,walkthrough.md} docs/
+   cp /Users/zhanghu/.gemini/antigravity/brain/bef3ae87-c1bd-44d9-9dd7-8f65bf2b27f1/{implementation_plan.md,task.md,walkthrough.md} docs/
    ```
 
-3. (Optional) Copy versioned backups.
+3. Copy versioned backups.
    // turbo
    ```bash
-   cp /Users/zhanghu/.gemini/antigravity/brain/625eb765-0296-4916-aa79-17774c92a05d/{implementation_plan.md,task.md,walkthrough.md}.* docs/ || true
+   cp /Users/zhanghu/.gemini/antigravity/brain/bef3ae87-c1bd-44d9-9dd7-8f65bf2b27f1//{implementation_plan.md,task.md,walkthrough.md}.* docs/ || true
    ```
