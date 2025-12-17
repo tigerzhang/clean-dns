@@ -1,0 +1,53 @@
+# MosDNS Clone in Rust (CleanDNS) Implementation Plan
+
+This plan outlines the steps to build `clean-dns`, a modular DNS forwarder inspired by `mosdns`, written in Rust.
+
+## User Review Required
+
+> [!IMPORTANT]
+> This implementation uses `hickory-dns` (formerly `trust-dns`) for low-level DNS protocol handling.
+> The architecture will be purely plugin-driven, similar to `mosdns`.
+
+## Proposed Changes
+
+We will create a new Rust project with the following structure:
+
+```text
+clean-dns/
+├── Cargo.toml
+├── src/
+│   ├── main.rs           # Entry point
+│   ├── config.rs         # Configuration loading
+│   ├── server.rs         # DNS Server implementation
+│   └── plugins/          # Plugin system
+│       ├── mod.rs        # Plugin trait definition
+│       ├── sequence.rs   # Chain of responsibility
+│       ├── forward.rs    # Updater/Forwarder
+│       └── matcher.rs    # Domain/IP matching
+```
+
+### Core Components
+
+#### [NEW] [Cargo.toml](file:///Users/zhanghu/vpn/clean-dns/Cargo.toml)
+- Dependencies: `tokio`, `hickory-server`, `hickory-proto`, `serde`, `serde_yaml`, `anyhow`, `tracing`, `tracing-subscriber`.
+
+#### [NEW] [src/plugins/mod.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs)
+- Defines the `Plugin` trait.
+- Defines the `Context` struct (holds the query, response, and client info).
+
+#### [NEW] [src/server.rs](file:///Users/zhanghu/vpn/clean-dns/src/server.rs)
+- Implements a UDP/TCP listener using `hickory-dns`'s server components or custom `tokio` sockets if more control is needed (MosDNS often uses raw sockets for flexibility, but we'll start with `hickory-server`'s `RequestHandler` trait for simplicity).
+
+#### [NEW] [src/config.rs](file:///Users/zhanghu/vpn/clean-dns/src/config.rs)
+- Structs for parsing `config.yaml`.
+- Logic to instantiate plugins based on config.
+
+### Verification Plan
+
+#### Automated Tests
+- Unit tests for each plugin (e.g., verifying `Matcher` correctly matches domains).
+- Integration test: Start the server and send a DNS query using `dig` to verify forwarding works.
+
+#### Manual Verification
+- Run `cargo run -- -c config.yaml`.
+- Use `dig @127.0.0.1 -p 5335 google.com` to test resolution.

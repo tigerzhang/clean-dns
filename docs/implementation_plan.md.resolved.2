@@ -1,0 +1,39 @@
+# Data Provider Plugins Implementation Plan
+
+We will implement `domain_set` and `ip_set` plugins to support `mosdns`-style data providers.
+
+## Proposed Changes
+
+### [MODIFY] [src/plugins/mod.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs)
+- Update [Plugin](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#33-41) trait to include data provider methods:
+    ```rust
+    fn as_domain_set(&self) -> Option<&dyn DomainSet>;
+    fn as_ip_set(&self) -> Option<&dyn IpSet>;
+    ```
+    (Or simply `match_domain` / `match_ip` methods directly on [Plugin](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#33-41) trait with default implementation `false`).
+    *Decision*: Let's use specific traits `DomainSet` and `IpSet` and casting/accessors to keep [Plugin](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#33-41) clean.
+
+### [NEW] [src/plugins/domain_set.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/domain_set.rs)
+- Loads domains from text files (one domain per line).
+- Implements `DomainSet` trait: `contains(&self, domain: &str) -> bool`.
+- Optimized using `HashSet` or `AhoCorasick` / Tree for suffix matching. For now, checking suffix manually or specific crate.
+
+### [NEW] [src/plugins/ip_set.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/ip_set.rs)
+- Loads IPs/CIDRs from text files.
+- Implements `IpSet` trait: `contains(&self, ip: IpAddr) -> bool`.
+- Uses `ipnet` crate for CIDR matching.
+
+### [MODIFY] [src/plugins/matcher.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/matcher.rs)
+- Update config to parsing `domain` entries.
+- If entry starts with `provider:`, assert that plugin exists and implements `DomainSet`.
+- Store references (Arc) to these providers.
+- In [matches()](file:///Users/zhanghu/vpn/clean-dns/src/plugins/matcher.rs#50-67), check these providers.
+
+### [MODIFY] [Config & Main]
+- Register new plugins.
+
+## Verification
+- Create `domain_list.txt` and `ip_list.txt`.
+- Configure `domain_set` and `ip_set` loading these files.
+- Configure `matcher` to use `provider:my_domain_set`.
+- Run `dig` to verify matching.

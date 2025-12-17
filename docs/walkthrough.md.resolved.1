@@ -1,0 +1,32 @@
+# CleanDNS Verification Walkthrough
+
+## Verification Steps
+
+1.  **Build**: ran `cargo check` and `cargo run`.
+2.  **Server Start**: `clean-dns` started successfully on `127.0.0.1:5335`.
+3.  **Core Plugins Verification**:
+    -   **Forward**: Resolved `google.com` (via 8.8.8.8).
+    -   **Matcher**: Verified `google.com` match and `example.com` miss (timeout).
+    -   **Hosts**: Resolved `myserver.local` to `192.168.1.100`.
+    -   **Cache**:
+        -   First query `google.com`: ~7ms (Forwarded).
+        -   Second query `google.com`: 0ms (Cache hit).
+
+## Artifacts
+
+-   `clean-dns` binary (debug build).
+-   [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml) with chain: Listen -> Hosts -> Cache -> [Forward].
+
+## Implemented Plugins
+
+-   `sequence`: Chain execution.
+-   `forward`: Upstream forwarding.
+-   `matcher`: Domain-based routing.
+-   `hosts`: Local static mapping.
+-   `cache`: In-memory TTL caching.
+
+## Next Steps
+
+-   Add specific "Response Matcher" or "Query Matcher" for advanced filtering.
+-   Implement logic for IP matching (GeoIP, IPSet).
+-   Add `fallback` plugin for high availability.

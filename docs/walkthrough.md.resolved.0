@@ -1,0 +1,22 @@
+# CleanDNS Verification Walkthrough
+
+## Verification Steps
+
+1.  **Build**: ran `cargo check` and `cargo run`.
+2.  **Server Start**: `clean-dns` started successfully on `127.0.0.1:5335`.
+3.  **DNS Resolution**: Verified using `dig`:
+    ```bash
+    dig @127.0.0.1 -p 5335 google.com
+    ```
+    Result: Successfully resolved `google.com` (Example IP: `59.24.3.174`).
+
+## Artifacts
+
+-   `clean-dns` binary (debug build).
+-   [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml) sample configuration.
+
+## Next Steps
+
+-   Implement real plugin loading from [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml).
+-   Add matching capabilities (domain/IP matchers).
+-   Add more plugins (cache, blocklist, etc.).

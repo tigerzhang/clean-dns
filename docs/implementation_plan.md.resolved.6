@@ -1,0 +1,30 @@
+# Forward Plugin Refactor Plan
+
+We will refactor the `forward` plugin to match MosDNS's capabilities, specifically supporting multiple upstreams and concurrent querying ("race" strategy).
+
+## Proposed Changes
+
+### [MODIFY] [src/plugins/forward.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/forward.rs)
+- Update [ForwardConfig](file:///Users/zhanghu/vpn/clean-dns/src/plugins/forward.rs#12-15):
+    - `upstreams`: `Vec<String>` (replaces `addr`).
+    - `concurrent`: `u32` (default 1).
+- Update [Forward](file:///Users/zhanghu/vpn/clean-dns/src/plugins/forward.rs#16-19) struct:
+    - Store `upstreams` as `Vec<SocketAddr>`.
+    - Store `concurrent`.
+- Update [next](file:///Users/zhanghu/vpn/clean-dns/src/plugins/forward.rs#39-60) method:
+    - If `concurrent == 1`: Simple round-robin or random pick? MosDNS does random.
+    - If `concurrent > 1`: Pick N random upstreams.
+    - Send queries to all selected upstreams concurrently.
+    - Wait for the fastest successful response.
+
+## Core Logic (Race)
+```rust
+let selected_upstreams = pick_random(&self.upstreams, self.concurrent);
+let futures = selected_upstreams.map(|addr| query_upstream(addr));
+let result = select_ok(futures).await;
+```
+
+## Verification
+- Configure `forward` with multiple upstreams (e.g., Google `8.8.8.8` and Cloudflare `1.1.1.1`).
+- Set `concurrent: 2`.
+- Verify queries resolve (fastest wins).

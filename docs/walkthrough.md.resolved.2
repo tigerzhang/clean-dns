@@ -1,0 +1,32 @@
+# CleanDNS Verification Walkthrough
+
+## Verification Steps
+
+1.  **Build**: ran `cargo check` and `cargo run`.
+2.  **Server Start**: `clean-dns` started successfully on `127.0.0.1:5335`.
+3.  **Data Provider Verification**:
+    -   Configured [domain_set](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#50-54) with [domain_list.txt](file:///Users/zhanghu/vpn/clean-dns/domain_list.txt) containing `youtube.com`.
+    -   Configured `matcher` to use `provider:youtube_list`.
+    -   **Match**: `youtube.com` resolved successfully (forwarded to 8.8.8.8).
+    -   **No Match**: `google.com` timed out (no matching rule).
+
+## Artifacts
+
+-   `clean-dns` binary (debug build).
+-   [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml).
+-   [domain_list.txt](file:///Users/zhanghu/vpn/clean-dns/domain_list.txt) sample data.
+
+## Implemented Plugins
+
+-   `sequence`: Chain execution.
+-   `forward`: Upstream forwarding.
+-   `matcher`: Domain-based routing (supports `provider:`).
+-   `hosts`: Local static mapping.
+-   `cache`: In-memory TTL caching.
+-   [domain_set](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#50-54): Domain list provider.
+-   [ip_set](file:///Users/zhanghu/vpn/clean-dns/src/plugins/ip_set.rs#79-82): IP/CIDR list provider.
+
+## Next Steps
+
+-   Add `fallback` plugin.
+-   Implement `geosite.dat` parsing for binary lists (optional).

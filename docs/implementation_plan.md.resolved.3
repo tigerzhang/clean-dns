@@ -1,0 +1,30 @@
+# IPSet Usage Implementation Plan
+
+To support using [ip_set](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#55-58), we will enhance the [Matcher](file:///Users/zhanghu/vpn/clean-dns/src/plugins/matcher.rs#17-22) plugin.
+
+## Proposed Changes
+
+### [MODIFY] [src/plugins/matcher.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/matcher.rs)
+- Add `client_ip` to [MatcherConfig](file:///Users/zhanghu/vpn/clean-dns/src/plugins/matcher.rs#10-16).
+- Support `provider:tag` in `client_ip` list.
+- Implement matching logic using `ctx.client_addr.ip()`.
+
+## Config Example
+```yaml
+plugins:
+  - tag: lan_ip
+    type: ip_set
+    args:
+        files: ["lan.txt"]
+
+  - tag: match_lan
+    type: matcher
+    args:
+        client_ip: ["provider:lan_ip"]
+        exec: ["forward_local"]
+```
+
+## Verification
+- Create `lan.txt` with `127.0.0.1`.
+- Update [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml) to match local client IP and forward to a specific upstream (or reject).
+- Run `dig` (which uses 127.0.0.1) and verify it hits the rule.

@@ -1,0 +1,40 @@
+# CleanDNS Implementation Tasks
+
+- [x] **Project Initialization**
+
+  - [x] Create Rust project
+  - [x] Define [Plugin](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#53-73) trait
+  - [x] Implement [Sequence](file:///Users/zhanghu/vpn/clean-dns/src/plugins/sequence.rs#13-16) plugin
+  - [x] Implement [Forward](file:///Users/zhanghu/vpn/clean-dns/src/plugins/forward.rs#31-36) plugin
+  - [x] Basic Server implementation
+  - [x] Verify with `dig`
+
+- [x] Executable Plugins
+
+  - [x] If Plugin
+  - [x] Return Plugin
+  - [x] Reject Plugin
+  - [x] Delay Plugin
+
+- [x] **Core Plugins Implementation**
+
+  - [x] **Matcher**: Implement simple domain/IP matching
+  - [x] **Cache**: Implement in-memory DNS cache
+  - [ ] **Fallback**: Implement primary/secondary upstream logic
+  - [x] **Hosts**: Implement local hosts file support
+  - [ ] **Query Matcher**: Match query type (A, AAAA, etc.)
+
+- [x] **Configuration & Loading**
+- [x] Refactor Forward Plugin
+
+  - [x] Plan
+  - [x] Update Dependencies
+  - [x] Implement Race Strategy
+  - [x] Implement SOCKS5 Support
+
+  - [x] Implement dynamic plugin loading from [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml)
+  - [x] Support arguments for plugins (e.g., upstream addr, files)
+
+- [ ] **Advanced Features (Optional)**
+  - [ ] **IPSet/DomainSet**: Optimized matching
+  - [ ] **ECS**: EDNS Client Subnet support

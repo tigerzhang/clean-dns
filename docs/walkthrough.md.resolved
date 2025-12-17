@@ -1,0 +1,51 @@
+# CleanDNS Verification Walkthrough
+
+## Verification Steps
+
+1.  **Build**: ran `cargo check` and `cargo run`.
+2.  **Server Start**: `clean-dns` started successfully on `127.0.0.1:5335`.
+3.  **Data Provider Verification**:
+    -   Configured [domain_set](file:///Users/zhanghu/vpn/clean-dns/src/plugins/domain_set.rs#84-87) with [domain_list.txt](file:///Users/zhanghu/vpn/clean-dns/domain_list.txt) containing `youtube.com`.
+    -   Configured `matcher` to use `provider:youtube_list`.
+    -   **Match**: `youtube.com` resolved successfully (forwarded to 8.8.8.8).
+    -   **No Match**: `google.com` timed out.
+4.  **IP Matching Verification**:
+    -   Configured [ip_set](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#65-68) with [ip_list.txt](file:///Users/zhanghu/vpn/clean-dns/ip_list.txt).
+    -   Configured `matcher` to use `client_ip: ["provider:ip_tag"]`.
+    -   **Match**: When list contained `127.0.0.1`, query from localhost resolved.
+    -   **No Match**: When list contained `192.168.1.1`, query from localhost timed out.
+5.  **Executable Plugins Verification**:
+    -   **If/Return**: Verified with `if: match_youtube` -> `exec: [stop]`. `youtube.com` timed out. `google.com` resolved.
+    -   **Reject/Delay**: Verified with `delay_3s` + `reject_all`.
+        -   Query for `google.com` took **3002ms** (Delay worked).
+        -   Returned status **REFUSED** (Reject worked).
+6.  **Comprehensive Config Verification**:
+    -   Updated [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml) to include ALL implemented plugins (Data Providers, Actions, Matchers, Logic, Cache, Hosts).
+    -   Server started successfully with zero errors.
+    -   `dig google.com` resolved successfully (served via full pipeline: Cache -> Hosts -> Block IPs -> Route Domains -> Forward).
+7.  **Forward Plugin Refactor Verification**:
+    -   Updated [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml) to use `upstreams` (list: `8.8.8.8:53`, `1.1.1.1:53`) and `concurrent: 2`.
+    -   `dig google.com` resolved successfully (verified race strategy works).
+    -   **SOCKS5**: Implemented TCP-over-SOCKS5 support (`tokio-socks`). Example config created at [socks5_example_config.yaml](file:///Users/zhanghu/vpn/clean-dns/socks5_example_config.yaml).
+
+## Artifacts
+
+-   `clean-dns` binary (debug build).
+-   [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml) (Current: Forward Race).
+-   [socks5_example_config.yaml](file:///Users/zhanghu/vpn/clean-dns/socks5_example_config.yaml).
+-   [domain_list.txt](file:///Users/zhanghu/vpn/clean-dns/domain_list.txt).
+-   [ip_list.txt](file:///Users/zhanghu/vpn/clean-dns/ip_list.txt).
+
+## Implemented Plugins
+
+-   `sequence`: Chain execution.
+-   `forward`: Upstream forwarding (Race + SOCKS5).
+-   `matcher`: Domain & IP routing.
+-   `hosts`: Local static mapping.
+-   `cache`: In-memory TTL caching.
+-   [domain_set](file:///Users/zhanghu/vpn/clean-dns/src/plugins/domain_set.rs#84-87): Domain list provider.
+-   [ip_set](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#65-68): IP/CIDR list provider.
+-   `if`: Conditional execution.
+-   `return`: Abort execution.
+-   `reject`: Return error response.
+-   `delay`: Traffic shaping.

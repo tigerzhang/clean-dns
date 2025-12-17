@@ -1,0 +1,27 @@
+# More Executable Plugins Implementation Plan
+
+We will implement `reject` and `delay` plugins to expand the `executable` capabilities.
+
+## Proposed Changes
+
+### [NEW] [src/plugins/reject_plugin.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/reject_plugin.rs)
+- Type: `reject`
+- Args: `rcode` (int, default 5 for REFUSED, or 3 for NXDOMAIN).
+- Logic:
+    - Sets `ctx.response` to a response with specified RCODE.
+    - Sets `ctx.abort = true` (stops further processing).
+
+### [NEW] [src/plugins/delay_plugin.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/delay_plugin.rs)
+- Type: `delay`
+- Args: `ms` (u64).
+- Logic: `sleep(ms)`.
+
+### [MODIFY] [src/main.rs](file:///Users/zhanghu/vpn/clean-dns/src/main.rs)
+- Register `reject` and `delay`.
+
+### [MODIFY] [src/plugins/mod.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs)
+- Expose modules.
+
+## Verification
+- Update config to `reject` a specific domain.
+- Update config to `delay` a query and verify timing with `dig`.

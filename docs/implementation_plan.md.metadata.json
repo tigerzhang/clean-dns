@@ -1,0 +1,6 @@
+{
+  "artifactType": "ARTIFACT_TYPE_IMPLEMENTATION_PLAN",
+  "summary": "Updated plan to include SOCKS5 support and forward refactor.",
+  "updatedAt": "2025-12-12T09:14:48.536145Z",
+  "version": "7"
+}
