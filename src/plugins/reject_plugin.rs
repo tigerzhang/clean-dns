@@ -54,3 +54,40 @@ impl Plugin for RejectPlugin {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, RwLock};
+
+    fn make_ctx() -> Context {
+        use crate::statistics::Statistics;
+        use hickory_proto::op::Message;
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+        Context::new(
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1234),
+            Message::new(),
+            Arc::new(RwLock::new(Statistics::new())),
+        )
+    }
+
+    #[tokio::test]
+    async fn test_reject_NXDOMAIN() {
+        let yaml = r#"
+            rcode: 3
+        "#;
+        let config: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let plugin = RejectPlugin::new(Some(&config)).unwrap();
+
+        let mut ctx = make_ctx();
+        plugin.next(&mut ctx).await.unwrap();
+
+        assert!(ctx.response.is_some());
+        assert_eq!(
+            ctx.response.unwrap().response_code(),
+            ResponseCode::NXDomain
+        );
+        assert!(ctx.abort);
+    }
+}

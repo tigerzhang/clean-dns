@@ -80,3 +80,37 @@ impl Plugin for IpSetPlugin {
         Some(self)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_ip_set_loading_and_matching() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, "192.168.1.0/24").unwrap();
+        writeln!(file, "10.0.0.1").unwrap();
+
+        let path = file.path().to_str().unwrap().to_string();
+
+        let yaml = format!(
+            r#"
+            files:
+              - "{}"
+            "#,
+            path
+        );
+        let config: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
+
+        let plugin = IpSetPlugin::new(Some(&config)).unwrap();
+
+        // Match CIDR
+        assert!(plugin.contains(IpAddr::from_str("192.168.1.50").unwrap()));
+        // Match exact IP
+        assert!(plugin.contains(IpAddr::from_str("10.0.0.1").unwrap()));
+        // No match
+        assert!(!plugin.contains(IpAddr::from_str("8.8.8.8").unwrap()));
+    }
+}

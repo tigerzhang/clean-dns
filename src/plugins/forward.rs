@@ -244,3 +244,38 @@ impl Plugin for Forward {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_upstream() {
+        let u = Forward::parse_upstream("8.8.8.8:53").unwrap();
+        if let Upstream::Udp(addr) = u {
+            assert_eq!(addr.to_string(), "8.8.8.8:53");
+        } else {
+            panic!("Expected UDP");
+        }
+
+        let u = Forward::parse_upstream("https://dns.google/dns-query").unwrap();
+        if let Upstream::DoH(url) = u {
+            assert_eq!(url.as_str(), "https://dns.google/dns-query");
+        } else {
+            panic!("Expected DoH");
+        }
+    }
+
+    #[test]
+    fn test_config_parsing() {
+        let yaml = r#"
+            addr: "1.1.1.1:53"
+            upstreams:
+              - "8.8.8.8:53"
+              - "https://1.1.1.1/dns-query"
+        "#;
+        let config: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let forward = Forward::new(Some(&config)).unwrap();
+        assert_eq!(forward.upstreams.len(), 3); // 1 from addr, 2 from upstreams
+    }
+}

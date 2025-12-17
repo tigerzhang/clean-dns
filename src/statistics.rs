@@ -59,3 +59,48 @@ impl Statistics {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::Ipv4Addr;
+
+    #[test]
+    fn test_record_request() {
+        let mut stats = Statistics::new();
+        stats.record_request("example.com.".to_string());
+
+        assert_eq!(stats.domains.get("example.com.").unwrap().count, 1);
+        stats.record_request("example.com.".to_string());
+        assert_eq!(stats.domains.get("example.com.").unwrap().count, 2);
+    }
+
+    #[test]
+    fn test_record_cache_hit() {
+        let mut stats = Statistics::new();
+        // Must record request first to init entry
+        stats.record_request("example.com.".to_string());
+        stats.record_cache_hit("example.com.".to_string());
+
+        assert_eq!(stats.domains.get("example.com.").unwrap().cache_hits, 1);
+    }
+
+    #[test]
+    fn test_record_resolved_ip() {
+        let mut stats = Statistics::new();
+        stats.record_request("example.com.".to_string());
+
+        let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        stats.record_resolved_ip("example.com.", ip);
+
+        let entry = stats.domains.get("example.com.").unwrap();
+        assert_eq!(entry.ips.len(), 1);
+        assert!(entry.ips.contains(&ip));
+
+        // Duplicate IP should not increase count
+        stats.record_resolved_ip("example.com.", ip);
+
+        let entry = stats.domains.get("example.com.").unwrap();
+        assert_eq!(entry.ips.len(), 1);
+    }
+}

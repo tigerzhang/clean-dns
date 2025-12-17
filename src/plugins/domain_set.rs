@@ -85,3 +85,38 @@ impl Plugin for DomainSetPlugin {
         Some(self)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_domain_set_loading_and_matching() {
+        // Create a temp file
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, "example.com").unwrap();
+        writeln!(file, "google.com").unwrap();
+        // Suffix matches implicitly? No, logic says "ends_with(d)".
+        // So "test.google.com" should match if "google.com" is in set.
+
+        let path = file.path().to_str().unwrap().to_string();
+
+        let yaml = format!(
+            r#"
+            files:
+              - "{}"
+            "#,
+            path
+        );
+        let config: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
+
+        let plugin = DomainSetPlugin::new(Some(&config)).unwrap();
+
+        assert!(plugin.contains("example.com"));
+        assert!(plugin.contains("google.com"));
+        assert!(plugin.contains("www.google.com")); // Suffix match
+        assert!(!plugin.contains("yahoo.com"));
+    }
+}

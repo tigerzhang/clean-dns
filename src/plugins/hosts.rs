@@ -111,3 +111,71 @@ impl Plugin for Hosts {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use std::sync::{Arc, RwLock};
+    use tempfile::NamedTempFile;
+
+    fn make_ctx(name: &str) -> Context {
+        use crate::statistics::Statistics;
+        use hickory_proto::op::{Message, Query};
+        use hickory_proto::rr::{Name, RecordType};
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+        let mut msg = Message::new();
+        msg.add_query(Query::query(Name::from_str(name).unwrap(), RecordType::A));
+
+        Context::new(
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1234),
+            msg,
+            Arc::new(RwLock::new(Statistics::new())),
+        )
+    }
+
+    #[tokio::test]
+    async fn test_hosts_lookup() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, "1.2.3.4 test.local").unwrap();
+        let path = file.path().to_str().unwrap().to_string();
+
+        let yaml = format!(
+            r#"
+            files:
+              - "{}"
+            hosts:
+              entry.local: "5.6.7.8"
+            "#,
+            path
+        );
+        let config: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
+        let hosts = Hosts::new(Some(&config)).unwrap();
+
+        // Match from file
+        let mut ctx = make_ctx("test.local.");
+        hosts.next(&mut ctx).await.unwrap();
+        assert!(ctx.response.is_some());
+        let answers = ctx.response.as_ref().unwrap().answers();
+        assert_eq!(answers.len(), 1);
+        if let Some(RData::A(ip)) = answers[0].data() {
+            assert_eq!(ip.to_string(), "1.2.3.4");
+        } else {
+            panic!("Expected A record");
+        }
+
+        // Match from inline
+        let mut ctx = make_ctx("entry.local.");
+        hosts.next(&mut ctx).await.unwrap();
+        assert!(ctx.response.is_some());
+        if let Some(RData::A(ip)) = ctx.response.as_ref().unwrap().answers()[0].data() {
+            assert_eq!(ip.to_string(), "5.6.7.8");
+        }
+
+        // No match
+        let mut ctx = make_ctx("google.com.");
+        hosts.next(&mut ctx).await.unwrap();
+        assert!(ctx.response.is_none());
+    }
+}

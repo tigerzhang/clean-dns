@@ -39,3 +39,38 @@ impl Plugin for DelayPlugin {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, RwLock};
+    use std::time::Instant;
+
+    fn make_ctx() -> Context {
+        use crate::statistics::Statistics;
+        use hickory_proto::op::Message;
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+        Context::new(
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1234),
+            Message::new(),
+            Arc::new(RwLock::new(Statistics::new())),
+        )
+    }
+
+    #[tokio::test]
+    async fn test_delay_plugin() {
+        let yaml = r#"
+            ms: 50
+        "#;
+        let config: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let plugin = DelayPlugin::new(Some(&config)).unwrap();
+
+        let start = Instant::now();
+        let mut ctx = make_ctx();
+        plugin.next(&mut ctx).await.unwrap();
+
+        // Assert at least 50ms passed (lenient check)
+        assert!(start.elapsed() >= Duration::from_millis(40));
+    }
+}
