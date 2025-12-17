@@ -1,27 +1,17 @@
-# CleanDNS Implementation Tasks
+# Tasks
 
-- [x] **Project Initialization**
-
-  - [x] Create Rust project
-  - [x] Define `Plugin` trait
-  - [x] Implement `Sequence` plugin
-  - [x] Implement `Forward` plugin
-  - [x] Basic Server implementation
-  - [x] Verify with `dig`
-
-- [x] **Core Plugins Implementation**
-
-  - [x] **Matcher**: Implement simple domain/IP matching
-  - [x] **Cache**: Implement in-memory DNS cache
-  - [ ] **Fallback**: Implement primary/secondary upstream logic
-  - [x] **Hosts**: Implement local hosts file support
-  - [ ] **Query Matcher**: Match query type (A, AAAA, etc.)
-
-- [x] **Configuration & Loading**
-
-  - [x] Implement dynamic plugin loading from `config.yaml`
-  - [x] Support arguments for plugins (e.g., upstream addr, files)
-
-- [ ] **Advanced Features (Optional)**
-  - [ ] **IPSet/DomainSet**: Optimized matching
-  - [ ] **ECS**: EDNS Client Subnet support
+- [ ] Explore codebase to identify hook points for statistics <!-- id: 0 -->
+- [ ] Create implementation plan <!-- id: 1 -->
+- [x] Implement data structure for statistics <!-- id: 2 -->
+- [x] Implement statistics gathering logic <!-- id: 3 -->
+  - [x] Domain names <!-- id: 4 -->
+        x [x] IP addresses resolved <!-- id: 5 -->
+  - [x] Resolve request count <!-- id: 6 -->
+  - [x] Cache hit count <!-- id: 7 -->
+  - [x] Latest resolve timestamp <!-- id: 8 -->
+- [x] Implement API Endpoint <!-- id: 10 -->
+  - [x] Add dependencies (axum, serde) <!-- id: 11 -->
+  - [x] Create `src/api.rs` <!-- id: 12 -->
+  - [x] Update `src/config.rs` <!-- id: 13 -->
+  - [x] Update `src/main.rs` to spawn API server <!-- id: 14 -->
+- [x] Verify implementation <!-- id: 9 -->

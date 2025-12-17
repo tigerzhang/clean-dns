@@ -1,6 +1,5 @@
 {
   "artifactType": "ARTIFACT_TYPE_TASK",
-  "summary": "Marked remaining implemented plugins as complete.",
-  "updatedAt": "2025-12-12T07:39:33.488154Z",
-  "version": "3"
+  "summary": "Task list for adding statistics support including domain names, IPs, counts, cache hits, and timestamps.",
+  "updatedAt": "2025-12-16T12:43:56.433356Z"
 }

@@ -1,6 +1,5 @@
 {
   "artifactType": "ARTIFACT_TYPE_IMPLEMENTATION_PLAN",
-  "summary": "Updated plan to include SOCKS5 support and forward refactor.",
-  "updatedAt": "2025-12-12T09:14:48.536145Z",
-  "version": "7"
+  "summary": "Add statistics support to CleanDNS.\n- Create `src/statistics.rs` for `Statistics` struct.\n- Integrate `Statistics` into `Context` to allow sharing across plugins and server.\n- Update `Server` to initialize stats and record request metrics (domain, timestamp) and response metrics (IPs).\n- Update `Cache` plugin to record cache hits.\n- Add thread-safety using `Arc<RwLock<Statistics>>`.",
+  "updatedAt": "2025-12-16T12:44:52.743408Z"
 }

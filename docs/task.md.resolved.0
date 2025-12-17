@@ -1,24 +1,13 @@
-# CleanDNS Implementation Tasks
+# Tasks
 
-- [x] **Project Initialization**
-    - [x] Create Rust project
-    - [x] Define [Plugin](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#30-38) trait
-    - [x] Implement [Sequence](file:///Users/zhanghu/vpn/clean-dns/src/plugins/sequence.rs#6-9) plugin
-    - [x] Implement [Forward](file:///Users/zhanghu/vpn/clean-dns/src/plugins/forward.rs#10-13) plugin
-    - [x] Basic Server implementation
-    - [x] Verify with `dig`
-
-- [ ] **Core Plugins Implementation**
-    - [ ] **Matcher**: Implement simple domain/IP matching
-    - [ ] **Cache**: Implement in-memory DNS cache
-    - [ ] **Fallback**: Implement primary/secondary upstream logic
-    - [ ] **Hosts**: Implement local hosts file support
-    - [ ] **Query Matcher**: Match query type (A, AAAA, etc.)
-
-- [ ] **Configuration & Loading**
-    - [ ] Implement dynamic plugin loading from [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml)
-    - [ ] Support arguments for plugins (e.g., upstream addr, files)
-
-- [ ] **Advanced Features (Optional)**
-    - [ ] **IPSet/DomainSet**: Optimized matching
-    - [ ] **ECS**: EDNS Client Subnet support
+- [ ] Explore codebase to identify hook points for statistics <!-- id: 0 -->
+- [ ] Create implementation plan <!-- id: 1 -->
+- [ ] Implement data structure for statistics <!-- id: 2 -->
+- [ ] Implement statistics gathering logic <!-- id: 3 -->
+    - [ ] Domain names <!-- id: 4 -->
+    - [ ] IP addresses resolved <!-- id: 5 -->
+    - [ ] Resolve request count <!-- id: 6 -->
+    - [ ] Cache hit count <!-- id: 7 -->
+    - [ ] Latest resolve timestamp <!-- id: 8 -->
+- [ ] Add API/Interface to view statistics (if needed, or just log them?) - User didn't specify, but usually "add statistics support" implies some way to access them. I will assume a basic dump or API is needed. For now, I'll focus on the core logic and maybe add a simple debug/monitoring endpoint or log output.
+- [ ] Verify implementation <!-- id: 9 -->

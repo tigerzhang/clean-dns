@@ -1,40 +1,67 @@
-# CleanDNS Verification Walkthrough
+# Walkthrough - Statistics Support
 
-## Verification Steps
+I have implemented statistics collection and an API endpoint for the DNS server.
 
-1.  **Build**: ran `cargo check` and `cargo run`.
-2.  **Server Start**: `clean-dns` started successfully on `127.0.0.1:5335`.
-3.  **Data Provider Verification**:
-    - Configured `domain_set` with `domain_list.txt` containing `youtube.com`.
-    - Configured `matcher` to use `provider:youtube_list`.
-    - **Match**: `youtube.com` resolved successfully (forwarded to 8.8.8.8).
-    - **No Match**: `google.com` timed out.
-4.  **IP Matching Verification**:
-    - Configured `ip_set` with `ip_list.txt`.
-    - Configured `matcher` to use `client_ip: ["provider:ip_tag"]`.
-    - **Match**: When list contained `127.0.0.1`, query from localhost resolved.
-    - **No Match**: When list contained `192.168.1.1`, query from localhost timed out.
-5.  **Executable Plugins Verification**:
-    - Configured `if` plugin: `if: match_youtube`, `exec: [stop]`, `else_exec: [google]`.
-    - Configured `return` plugin (tag: `stop`).
-    - **Condition Met**: `youtube.com` matched, executed `stop` (return). Query timed out (execution aborted).
-    - **Condition Not Met**: `google.com` did not match, executed `google` (forward). Query resolved.
+## Changes
 
-## Artifacts
+### 1. Data Structure (`src/statistics.rs`)
 
-- `clean-dns` binary (debug build).
-- `config.yaml`.
-- `domain_list.txt`.
-- `ip_list.txt`.
+Added `Statistics` struct to track:
 
-## Implemented Plugins
+- `domains`: Map of domain names to `DomainStats`.
+- `DomainStats`:
+  - `count`: Number of queries.
+  - `last_resolved_at`: Timestamp of last query.
+  - `ips`: Set of resolved IP addresses for the domain.
+  - `cache_hits`: Number of cache hits for the domain.
 
-- `sequence`: Chain execution.
-- `forward`: Upstream forwarding.
-- `matcher`: Domain & IP routing.
-- `hosts`: Local static mapping.
-- `cache`: In-memory TTL caching.
-- `domain_set`: Domain list provider.
-- `ip_set`: IP/CIDR list provider.
-- `if`: Conditional execution.
-- `return`: Abort execution.
+### 2. API Endpoint (`src/api.rs`)
+
+- Implemented an Axum-based HTTP server.
+- Endpoint: `GET /stats` returns the current statistics in JSON format.
+- Port is configurable via `config.yaml` (default `3000`).
+
+### 3. Integration
+
+- **Server (`src/server.rs`)**:
+  - Initializes shared statistics.
+  - Records incoming requests (domain, count, timestamp).
+  - Records resolved IPs from responses.
+- **Cache Plugin (`src/plugins/cache.rs`)**:
+  - Records cache hits for specific domains.
+- **Context (`src/plugins/mod.rs`)**:
+  - Passes shared statistics to plugins.
+
+## Verification Results
+
+### Test Run
+
+Ran `verify.sh` which:
+
+1. Starts the server on port `5336` (API on `3002`).
+2. Digs `apple.com` (Miss -> Cache).
+3. Digs `apple.com` again (Hit).
+4. Fetches `/stats`.
+
+### Output
+
+```json
+{
+  "domains": {
+    "apple.com.": {
+      "count": 2,
+      "last_resolved_at": "...",
+      "ips": ["17.253.144.10"],
+      "cache_hits": 1
+    }
+  }
+}
+```
+
+This confirms all requirements:
+
+1. Domain names included.
+2. IPs resolved included (per domain).
+3. Request count included.
+4. Cache hit count included.
+5. Latest timestamp included.

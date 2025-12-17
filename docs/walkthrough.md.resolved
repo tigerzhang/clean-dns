@@ -1,51 +1,61 @@
-# CleanDNS Verification Walkthrough
+# Walkthrough - Statistics Support
 
-## Verification Steps
+I have implemented statistics collection and an API endpoint for the DNS server.
 
-1.  **Build**: ran `cargo check` and `cargo run`.
-2.  **Server Start**: `clean-dns` started successfully on `127.0.0.1:5335`.
-3.  **Data Provider Verification**:
-    -   Configured [domain_set](file:///Users/zhanghu/vpn/clean-dns/src/plugins/domain_set.rs#84-87) with [domain_list.txt](file:///Users/zhanghu/vpn/clean-dns/domain_list.txt) containing `youtube.com`.
-    -   Configured `matcher` to use `provider:youtube_list`.
-    -   **Match**: `youtube.com` resolved successfully (forwarded to 8.8.8.8).
-    -   **No Match**: `google.com` timed out.
-4.  **IP Matching Verification**:
-    -   Configured [ip_set](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#65-68) with [ip_list.txt](file:///Users/zhanghu/vpn/clean-dns/ip_list.txt).
-    -   Configured `matcher` to use `client_ip: ["provider:ip_tag"]`.
-    -   **Match**: When list contained `127.0.0.1`, query from localhost resolved.
-    -   **No Match**: When list contained `192.168.1.1`, query from localhost timed out.
-5.  **Executable Plugins Verification**:
-    -   **If/Return**: Verified with `if: match_youtube` -> `exec: [stop]`. `youtube.com` timed out. `google.com` resolved.
-    -   **Reject/Delay**: Verified with `delay_3s` + `reject_all`.
-        -   Query for `google.com` took **3002ms** (Delay worked).
-        -   Returned status **REFUSED** (Reject worked).
-6.  **Comprehensive Config Verification**:
-    -   Updated [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml) to include ALL implemented plugins (Data Providers, Actions, Matchers, Logic, Cache, Hosts).
-    -   Server started successfully with zero errors.
-    -   `dig google.com` resolved successfully (served via full pipeline: Cache -> Hosts -> Block IPs -> Route Domains -> Forward).
-7.  **Forward Plugin Refactor Verification**:
-    -   Updated [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml) to use `upstreams` (list: `8.8.8.8:53`, `1.1.1.1:53`) and `concurrent: 2`.
-    -   `dig google.com` resolved successfully (verified race strategy works).
-    -   **SOCKS5**: Implemented TCP-over-SOCKS5 support (`tokio-socks`). Example config created at [socks5_example_config.yaml](file:///Users/zhanghu/vpn/clean-dns/socks5_example_config.yaml).
+## Changes
 
-## Artifacts
+### 1. Data Structure ([src/statistics.rs](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs))
+Added [Statistics](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs#7-10) struct to track:
+- `domains`: Map of domain names to [DomainStats](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs#12-18).
+- [DomainStats](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs#12-18):
+    - `count`: Number of queries.
+    - `last_resolved_at`: Timestamp of last query.
+    - `ips`: Set of resolved IP addresses for the domain.
+    - `cache_hits`: Number of cache hits for the domain.
 
--   `clean-dns` binary (debug build).
--   [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml) (Current: Forward Race).
--   [socks5_example_config.yaml](file:///Users/zhanghu/vpn/clean-dns/socks5_example_config.yaml).
--   [domain_list.txt](file:///Users/zhanghu/vpn/clean-dns/domain_list.txt).
--   [ip_list.txt](file:///Users/zhanghu/vpn/clean-dns/ip_list.txt).
+### 2. API Endpoint ([src/api.rs](file:///Users/zhanghu/vpn/clean-dns/src/api.rs))
+- Implemented an Axum-based HTTP server.
+- Endpoint: `GET /stats` returns the current statistics in JSON format.
+- Port is configurable via [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml) (default `3000`).
 
-## Implemented Plugins
+### 3. Integration
+- **Server ([src/server.rs](file:///Users/zhanghu/vpn/clean-dns/src/server.rs))**:
+    - Initializes shared statistics.
+    - Records incoming requests (domain, count, timestamp).
+    - Records resolved IPs from responses.
+- **Cache Plugin ([src/plugins/cache.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/cache.rs))**:
+    - Records cache hits for specific domains.
+- **Context ([src/plugins/mod.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs))**:
+    - Passes shared statistics to plugins.
 
--   `sequence`: Chain execution.
--   `forward`: Upstream forwarding (Race + SOCKS5).
--   `matcher`: Domain & IP routing.
--   `hosts`: Local static mapping.
--   `cache`: In-memory TTL caching.
--   [domain_set](file:///Users/zhanghu/vpn/clean-dns/src/plugins/domain_set.rs#84-87): Domain list provider.
--   [ip_set](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#65-68): IP/CIDR list provider.
--   `if`: Conditional execution.
--   `return`: Abort execution.
--   `reject`: Return error response.
--   `delay`: Traffic shaping.
+## Verification Results
+
+### Test Run
+Ran [verify.sh](file:///Users/zhanghu/vpn/clean-dns/verify.sh) which:
+1. Starts the server on port `5336` (API on `3002`).
+2. Digs `apple.com` (Miss -> Cache).
+3. Digs `apple.com` again (Hit).
+4. Fetches `/stats`.
+
+### Output
+```json
+{
+    "domains": {
+        "apple.com.": {
+            "count": 2,
+            "last_resolved_at": "...",
+            "ips": [
+                "17.253.144.10"
+            ],
+            "cache_hits": 1
+        }
+    }
+}
+```
+
+This confirms all requirements:
+1. Domain names included.
+2. IPs resolved included (per domain).
+3. Request count included.
+4. Cache hit count included.
+5. Latest timestamp included.

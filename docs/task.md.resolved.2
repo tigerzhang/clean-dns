@@ -1,27 +1,17 @@
-# CleanDNS Implementation Tasks
+# Tasks
 
-- [x] **Project Initialization**
-
-  - [x] Create Rust project
-  - [x] Define [Plugin](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#32-40) trait
-  - [x] Implement [Sequence](file:///Users/zhanghu/vpn/clean-dns/src/plugins/sequence.rs#12-15) plugin
-  - [x] Implement [Forward](file:///Users/zhanghu/vpn/clean-dns/src/plugins/forward.rs#16-19) plugin
-  - [x] Basic Server implementation
-  - [x] Verify with `dig`
-
-- [x] **Core Plugins Implementation**
-
-  - [x] **Matcher**: Implement simple domain/IP matching
-  - [ ] **Cache**: Implement in-memory DNS cache
-  - [ ] **Fallback**: Implement primary/secondary upstream logic
-  - [x] **Hosts**: Implement local hosts file support
-  - [ ] **Query Matcher**: Match query type (A, AAAA, etc.)
-
-- [x] **Configuration & Loading**
-
-  - [x] Implement dynamic plugin loading from [config.yaml](file:///Users/zhanghu/vpn/clean-dns/config.yaml)
-  - [x] Support arguments for plugins (e.g., upstream addr, files)
-
-- [ ] **Advanced Features (Optional)**
-  - [ ] **IPSet/DomainSet**: Optimized matching
-  - [ ] **ECS**: EDNS Client Subnet support
+- [ ] Explore codebase to identify hook points for statistics <!-- id: 0 -->
+- [ ] Create implementation plan <!-- id: 1 -->
+- [x] Implement data structure for statistics <!-- id: 2 -->
+- [ ] Implement statistics gathering logic <!-- id: 3 -->
+  - [ ] Domain names <!-- id: 4 -->
+  - [ ] IP addresses resolved <!-- id: 5 -->
+  - [ ] Resolve request count <!-- id: 6 -->
+  - [ ] Cache hit count <!-- id: 7 -->
+  - [ ] Latest resolve timestamp <!-- id: 8 -->
+- [/] Implement API Endpoint <!-- id: 10 -->
+  - [x] Add dependencies (axum, serde) <!-- id: 11 -->
+  - [ ] Create `src/api.rs` <!-- id: 12 -->
+  - [ ] Update [src/config.rs](file:///Users/zhanghu/vpn/clean-dns/src/config.rs) <!-- id: 13 -->
+  - [ ] Update [src/main.rs](file:///Users/zhanghu/vpn/clean-dns/src/main.rs) to spawn API server <!-- id: 14 -->
+- [ ] Verify implementation <!-- id: 9 -->

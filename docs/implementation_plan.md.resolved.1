@@ -1,71 +1,94 @@
-# MosDNS Clone in Rust (CleanDNS) Implementation Plan
+# Add Statistics Support
 
-This plan outlines the steps to build `clean-dns`, a modular DNS forwarder inspired by `mosdns`, written in Rust.
+## Goal
 
-## User Review Required
+Add functionality to collect and store DNS server statistics:
 
-> [!IMPORTANT]
-> This implementation uses `hickory-dns` (formerly `trust-dns`) for low-level DNS protocol handling.
-> The architecture will be purely plugin-driven, similar to `mosdns`.
+1. Domain names queried.
+2. IP addresses resolved.
+3. Resolve request count per domain.
+4. Cache hit count.
+5. Latest resolve timestamp per domain.
 
 ## Proposed Changes
 
-We will create a new Rust project with the following structure:
+### [NEW] [src/statistics.rs](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs)
 
-```text
-clean-dns/
-├── Cargo.toml
-├── src/
-│   ├── main.rs           # Entry point
-│   ├── config.rs         # Configuration loading
-│   ├── server.rs         # DNS Server implementation
-│   └── plugins/          # Plugin system
-│       ├── mod.rs        # Plugin trait definition
-│       ├── sequence.rs   # Chain of responsibility
-│       ├── forward.rs    # Updater/Forwarder
-│       └── matcher.rs    # Domain/IP matching
-```
+- Define `Statistics` struct.
+- Fields:
+  - `domains: HashMap<String, DomainStats>`
+  - `ips: HashMap<IpAddr, usize>`
+  - `cache_hits: usize`
+- Define `DomainStats`:
+  - `count: usize`
+  - `last_resolved_at: DateTime<Utc>` (or `SystemTime`)
 
-### Core Components
+### [MODIFY] [src/plugins/mod.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs)
 
-#### [NEW] [Cargo.toml](file:///Users/zhanghu/vpn/clean-dns/Cargo.toml)
+- Import `Statistics`.
+- Add `stats: Arc<RwLock<Statistics>>` to [Context](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#23-29) struct.
+- Update `Context::new` signature.
 
-- Dependencies: `tokio`, `hickory-server`, `hickory-proto`, `serde`, `serde_yaml`, `anyhow`, `tracing`, `tracing-subscriber`.
+### [MODIFY] [Cargo.toml](file:///Users/zhanghu/vpn/clean-dns/Cargo.toml)
+- Add `axum = "0.7"`
+- Add `serde_json = "1.0"`
 
-#### [NEW] [src/plugins/mod.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs)
+### [NEW] [src/api.rs](file:///Users/zhanghu/vpn/clean-dns/src/api.rs)
+- Define `pub async fn start_api_server(stats: Arc<RwLock<Statistics>>, port: u16) -> Result<()>`
+- Setup Axum router with route `GET /metrics` or `GET /stats`.
+- Handler `get_stats` returns JSON representation of statistics.
 
-- Defines the [Plugin](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#30-38) trait.
-- Defines the [Context](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#12-17) struct (holds the query, response, and client info).
+### [MODIFY] [src/statistics.rs](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs)
+- Derive `Serialize` for `Statistics` and `DomainStats`.
 
-#### [NEW] [src/server.rs](file:///Users/zhanghu/vpn/clean-dns/src/server.rs)
+### [MODIFY] [src/server.rs](file:///Users/zhanghu/vpn/clean-dns/src/server.rs)
 
-- Implements a UDP/TCP listener using `hickory-dns`'s server components or custom `tokio` sockets if more control is needed (MosDNS often uses raw sockets for flexibility, but we'll start with `hickory-server`'s `RequestHandler` trait for simplicity).
+- Initialize `statistics: Arc<RwLock<Statistics>>` in `Server::new`.
+- Pass `statistics` to `Context::new`.
+- IN [handle_request](file:///Users/zhanghu/vpn/clean-dns/src/server.rs#40-58):
+  - **Pre-processing**: Extract domain from [request](file:///Users/zhanghu/vpn/clean-dns/src/server.rs#40-58), update `domains` map (count++, timestamp).
+  - **Post-processing**: Inspection `ctx.response`. If present, extract answer IPs and update `ips` map.
 
-#### [NEW] [src/plugins/matcher.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/matcher.rs)
-- Implements domain matching (suffix/exact).
-- Can match against a list of domains.
-- If matched, executes a "then" sub-plugin? Or simply returns "true" for a boolean check? 
-  - *Design decision*: MosDNS matchers often act as routers. If matched, run sub-sequence.
+### [MODIFY] [src/plugins/cache.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/cache.rs)
 
-#### [NEW] [src/plugins/cache.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/cache.rs)
-- Implements an enhanced LRU cache for DNS responses.
-- Respects TTL.
+- IN [next](file:///Users/zhanghu/vpn/clean-dns/src/plugins/cache.rs#77-118):
+  - On cache hit, access `ctx.stats` and increment `cache_hits`.
 
-#### [NEW] [src/plugins/fallback.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/fallback.rs)
-- Takes a primary and secondary plugin.
-- Runs primary; if it fails (network error), runs secondary.
+### [MODIFY] [src/config.rs](file:///Users/zhanghu/vpn/clean-dns/src/config.rs)
+- Add `api_port: Option<u16>` to [Config](file:///Users/zhanghu/vpn/clean-dns/src/plugins/cache.rs#12-17) struct (default to e.g., 3000 if not set, or disable if None - let's default to a port or make it optional but recommended).
+- Let's assume `api_port` in config.
 
-#### [Modifying] [src/config.rs](file:///Users/zhanghu/vpn/clean-dns/src/config.rs)
-- Refactor to support dynamic plugin definitions (e.g., `type: sequence`, `args: ...`).
+### [MODIFY] [src/main.rs](file:///Users/zhanghu/vpn/clean-dns/src/main.rs)
+- Spawn API server task if configured.
 
-### Verification Plan
+### Accessing Statistics
 
-#### Automated Tests
+- For now, I will add a simple method to `Statistics` to dump data or just log it. The user didn't ask for an API endpoint API, but I might add a `Debug` print or a simple logical hook.
+- **Self-correction**: To make it verifiable, I should probably add a way to dump it. Maybe just a simple log on shutdown or a method that can be called.
+- Since the user task is "add Statistics support", simply collecting them in memory is the core. I'll add a helper to print them?
+- Actually, the user might want to see them. I'll add a `print_stats` method or similar, but without an HTTP server, accessing it is hard.
+- I will just implement the collection logic as requested. Creating a new API endpoint might be out of scope unless I see an API server existing.
+- Checking [src/main.rs](file:///Users/zhanghu/vpn/clean-dns/src/main.rs) might reveal if there's an HTTP server.
 
-- Unit tests for each plugin (e.g., verifying `Matcher` correctly matches domains).
-- Integration test: Start the server and send a DNS query using `dig` to verify forwarding works.
+## Verification Plan
 
-#### Manual Verification
+### Manual Verification
+1.  **Run Server**: Start `clean-dns`.
+2.  **Generate Load**: Use `dig` to query domains.
+3.  **Query API**: `curl http://127.0.0.1:3000/stats`
+4.  **Check Output**: Verify JSON output contains expected domains, counts, IPs, and cache hits. {
+    "domains": { "google.com": { "count": 1, "last_resolved_at": "..." } },
+    "ips": { "142.250.x.x": 1 },
+    "cache_hits": 0
+}
 
-- Run `cargo run -- -c config.yaml`.
-- Use `dig @127.0.0.1 -p 5335 google.com` to test resolution.
+### Automated Tests
+
+- I can create a unit test in [server.rs](file:///Users/zhanghu/vpn/clean-dns/src/server.rs) or `statistics.rs`?
+- Since [Server](file:///Users/zhanghu/vpn/clean-dns/src/server.rs#9-13) binds to a port, integration test is better.
+- I will modify [main.rs](file:///Users/zhanghu/vpn/clean-dns/src/main.rs) or create a test binary that runs the server and queries it, then checks the stats (if I expose them).
+- **Better**: Unit test `Statistics` logic.
+- **Better**: Integration test in [server.rs](file:///Users/zhanghu/vpn/clean-dns/src/server.rs)? `Server::handle_request` is async. I can mock the socket? No, it takes `UdpSocket`.
+- I'll rely on manual verification with logs for this feature as it involves runtime state.
+
+I'll query [main.rs](file:///Users/zhanghu/vpn/clean-dns/src/main.rs) to see how args are parsed and if I can add a flag to dump stats, or if there is an existing control channel.

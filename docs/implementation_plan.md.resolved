@@ -1,32 +1,94 @@
-# Forward Plugin Refactor Plan
+# Add Statistics Support
 
-We will refactor the `forward` plugin to match MosDNS's capabilities, specifically supporting multiple upstreams, concurrent querying ("race" strategy), and SOCKS5 proxy support.
+## Goal
+
+Add functionality to collect and store DNS server statistics:
+
+1. Domain names queried.
+2. IP addresses resolved.
+3. Resolve request count per domain.
+4. Cache hit count.
+5. Latest resolve timestamp per domain.
 
 ## Proposed Changes
 
+### [NEW] [src/statistics.rs](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs)
+
+- Define `Statistics` struct.
+- Fields:
+  - `domains: HashMap<String, DomainStats>`
+  - `ips: HashMap<IpAddr, usize>`
+  - `cache_hits: usize`
+- Define `DomainStats`:
+  - `count: usize`
+  - `last_resolved_at: DateTime<Utc>` (or `SystemTime`)
+
+### [MODIFY] [src/plugins/mod.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs)
+
+- Import `Statistics`.
+- Add `stats: Arc<RwLock<Statistics>>` to [Context](file:///Users/zhanghu/vpn/clean-dns/src/plugins/mod.rs#23-29) struct.
+- Update `Context::new` signature.
+
 ### [MODIFY] [Cargo.toml](file:///Users/zhanghu/vpn/clean-dns/Cargo.toml)
-- Add `tokio-socks = "0.5"` (or latest compatible).
-- Add `rand = "0.8"`. 
+- Add `axum = "0.7"`
+- Add `serde_json = "1.0"`
 
-### [MODIFY] [src/plugins/forward.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/forward.rs)
-- Update [ForwardConfig](file:///Users/zhanghu/vpn/clean-dns/src/plugins/forward.rs#12-15):
-    - `upstreams`: `Vec<String>` (replaces `addr`).
-    - `concurrent`: `u32` (default 1).
-    - `socks5`: `Option<String>` (e.g., "127.0.0.1:1080").
-- Update [Forward](file:///Users/zhanghu/vpn/clean-dns/src/plugins/forward.rs#16-19) struct:
-    - Store `upstreams` as `Vec<SocketAddr>`.
-    - Store `concurrent`.
-    - Store `socks5_addr` as `Option<SocketAddr>`.
-- Logic Update:
-    - If `socks5` is configured:
-        - Use `tokio_socks::tcp::Socks5Stream` or `UdpAssociate`?
-        - DNS is UDP. SOCKS5 supports UDP ASSOCIATE.
-        - Implementation details: Connect to SOCKS5 server, Request UDP Associate, Send UDP packets via the relay.
-    - If `concurrent > 1`:
-        - Pick random upstreams.
-        - Race them (with or without proxy).
+### [NEW] [src/api.rs](file:///Users/zhanghu/vpn/clean-dns/src/api.rs)
+- Define `pub async fn start_api_server(stats: Arc<RwLock<Statistics>>, port: u16) -> Result<()>`
+- Setup Axum router with route `GET /metrics` or `GET /stats`.
+- Handler `get_stats` returns JSON representation of statistics.
 
-## Verification
-- Add `rand` and `tokio-socks` dependencies.
-- Configure `forward` with `socks5: "127.0.0.1:1080"` (Need a running proxy to verify).
-- Dry-run verification if no proxy available (or mock).
+### [MODIFY] [src/statistics.rs](file:///Users/zhanghu/vpn/clean-dns/src/statistics.rs)
+- Derive `Serialize` for `Statistics` and `DomainStats`.
+
+### [MODIFY] [src/server.rs](file:///Users/zhanghu/vpn/clean-dns/src/server.rs)
+
+- Initialize `statistics: Arc<RwLock<Statistics>>` in `Server::new`.
+- Pass `statistics` to `Context::new`.
+- IN [handle_request](file:///Users/zhanghu/vpn/clean-dns/src/server.rs#40-58):
+  - **Pre-processing**: Extract domain from [request](file:///Users/zhanghu/vpn/clean-dns/src/server.rs#40-58), update `domains` map (count++, timestamp).
+  - **Post-processing**: Inspection `ctx.response`. If present, extract answer IPs and update `ips` map.
+
+### [MODIFY] [src/plugins/cache.rs](file:///Users/zhanghu/vpn/clean-dns/src/plugins/cache.rs)
+
+- IN [next](file:///Users/zhanghu/vpn/clean-dns/src/plugins/cache.rs#77-118):
+  - On cache hit, access `ctx.stats` and increment `cache_hits`.
+
+### [MODIFY] [src/config.rs](file:///Users/zhanghu/vpn/clean-dns/src/config.rs)
+- Add `api_port: Option<u16>` to [Config](file:///Users/zhanghu/vpn/clean-dns/src/plugins/cache.rs#12-17) struct (default to e.g., 3000 if not set, or disable if None - let's default to a port or make it optional but recommended).
+- Let's assume `api_port` in config.
+
+### [MODIFY] [src/main.rs](file:///Users/zhanghu/vpn/clean-dns/src/main.rs)
+- Spawn API server task if configured.
+
+### Accessing Statistics
+
+- For now, I will add a simple method to `Statistics` to dump data or just log it. The user didn't ask for an API endpoint API, but I might add a `Debug` print or a simple logical hook.
+- **Self-correction**: To make it verifiable, I should probably add a way to dump it. Maybe just a simple log on shutdown or a method that can be called.
+- Since the user task is "add Statistics support", simply collecting them in memory is the core. I'll add a helper to print them?
+- Actually, the user might want to see them. I'll add a `print_stats` method or similar, but without an HTTP server, accessing it is hard.
+- I will just implement the collection logic as requested. Creating a new API endpoint might be out of scope unless I see an API server existing.
+- Checking [src/main.rs](file:///Users/zhanghu/vpn/clean-dns/src/main.rs) might reveal if there's an HTTP server.
+
+## Verification Plan
+
+### Manual Verification
+1.  **Run Server**: Start `clean-dns`.
+2.  **Generate Load**: Use `dig` to query domains.
+3.  **Query API**: `curl http://127.0.0.1:3000/stats`
+4.  **Check Output**: Verify JSON output contains expected domains, counts, IPs, and cache hits. {
+    "domains": { "google.com": { "count": 1, "last_resolved_at": "..." } },
+    "ips": { "142.250.x.x": 1 },
+    "cache_hits": 0
+}
+
+### Automated Tests
+
+- I can create a unit test in [server.rs](file:///Users/zhanghu/vpn/clean-dns/src/server.rs) or `statistics.rs`?
+- Since [Server](file:///Users/zhanghu/vpn/clean-dns/src/server.rs#9-13) binds to a port, integration test is better.
+- I will modify [main.rs](file:///Users/zhanghu/vpn/clean-dns/src/main.rs) or create a test binary that runs the server and queries it, then checks the stats (if I expose them).
+- **Better**: Unit test `Statistics` logic.
+- **Better**: Integration test in [server.rs](file:///Users/zhanghu/vpn/clean-dns/src/server.rs)? `Server::handle_request` is async. I can mock the socket? No, it takes `UdpSocket`.
+- I'll rely on manual verification with logs for this feature as it involves runtime state.
+
+I'll query [main.rs](file:///Users/zhanghu/vpn/clean-dns/src/main.rs) to see how args are parsed and if I can add a flag to dump stats, or if there is an existing control channel.
