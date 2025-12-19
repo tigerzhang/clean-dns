@@ -24,10 +24,10 @@ pub struct Matcher {
 
 impl Matcher {
     pub fn new(
-        config: Option<&serde_yaml::Value>,
+        _config: Option<&serde_yaml::Value>,
         registry: &HashMap<String, SharedPlugin>,
     ) -> Result<Self> {
-        let config: MatcherConfig = if let Some(c) = config {
+        let config: MatcherConfig = if let Some(c) = _config {
             serde_yaml::from_value(c.clone())?
         } else {
             MatcherConfig {
