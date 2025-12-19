@@ -35,6 +35,11 @@ plugins:
       upstreams:
         - "114.114.114.114:53"
 
+  # System Resolver (Uses host's default DNS)
+  - tag: forward_system
+    type: system
+    args: {}
+
   # 3. Control Flow
   - tag: stop
     type: return
@@ -50,8 +55,8 @@ plugins:
   - tag: fallback_group
     type: fallback
     args:
-      primary: forward_local
-      secondary: forward_backup
+      primary: forward_system # Use system default DNS first
+      secondary: forward_local # Fallback to AliDNS if system fails
 
   - tag: ttl_fix
     type: ttl

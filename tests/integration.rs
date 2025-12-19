@@ -2,7 +2,6 @@ use clean_dns::{
     config::Config, create_plugin_registry, get_entry_plugin, server::Server,
     statistics::Statistics,
 };
-use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::net::UdpSocket;
@@ -173,4 +172,79 @@ async fn test_api_stats() {
     // Check structure (domains map is empty)
     assert!(stats_json.get("domains").is_some());
     assert!(stats_json["domains"].as_object().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn test_system_resolver_integration() {
+    use clean_dns::{
+        config::Config, create_plugin_registry, get_entry_plugin, server::Server,
+        statistics::Statistics,
+    };
+    use std::io::Write;
+    use std::sync::{Arc, RwLock};
+    use std::time::Duration;
+    use tempfile::NamedTempFile;
+    use tokio::net::UdpSocket;
+
+    let mut config_file = NamedTempFile::new().unwrap();
+    let config_yaml = r#"
+bind: "127.0.0.1:0"
+api_port: 0
+entry: sys
+plugins:
+  - tag: sys
+    type: system
+"#;
+    writeln!(config_file, "{}", config_yaml).unwrap();
+
+    let mut config = Config::from_file(config_file.path().to_str().unwrap()).unwrap();
+    config.bind = "127.0.0.1:0".to_string();
+
+    let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = socket.local_addr().unwrap();
+    drop(socket);
+
+    let registry = create_plugin_registry(&config).unwrap();
+    let entry_plugin = get_entry_plugin(&config, &registry).unwrap();
+    let statistics = Arc::new(RwLock::new(Statistics::new()));
+
+    let server = Server::new(server_addr, entry_plugin, statistics.clone());
+    tokio::spawn(async move {
+        server.run().await.unwrap();
+    });
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let client_socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    client_socket.connect(server_addr).await.unwrap();
+
+    use hickory_proto::op::{Message, MessageType, OpCode, Query};
+    use hickory_proto::rr::{Name, RecordType};
+    use std::str::FromStr;
+
+    let mut msg = Message::new();
+    msg.set_id(5678);
+    msg.set_message_type(MessageType::Query);
+    msg.set_op_code(OpCode::Query);
+    msg.set_recursion_desired(true);
+    msg.add_query(Query::query(
+        Name::from_str("google.com.").unwrap(),
+        RecordType::A,
+    ));
+
+    client_socket.send(&msg.to_vec().unwrap()).await.unwrap();
+
+    let mut buf = [0u8; 512];
+    let (len, _) = tokio::time::timeout(Duration::from_secs(2), client_socket.recv_from(&mut buf))
+        .await
+        .expect("Timeout")
+        .expect("Recv failed");
+
+    let response = Message::from_vec(&buf[..len]).unwrap();
+    assert_eq!(response.id(), 5678);
+    // Success depends on network but it should at least be a valid response
+    println!(
+        "Integration system resolve rcode: {:?}",
+        response.response_code()
+    );
 }

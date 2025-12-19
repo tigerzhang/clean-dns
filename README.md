@@ -74,6 +74,10 @@ plugins:
     args:
       upstreams: ["1.1.1.1:53"]
 
+  - tag: forward_system
+    type: system
+    args: {}
+
   - tag: stop
     type: return
     args: {}
@@ -87,8 +91,8 @@ plugins:
   - tag: fallback_group
     type: fallback
     args:
-      primary: [forward_local]
-      secondary: [forward_backup]
+      primary: [forward_system]
+      secondary: [forward_local]
 
   - tag: ttl_fix
     type: ttl
@@ -134,6 +138,7 @@ plugins:
 | `return`     | Stops execution in the current sequence. | -                                                       |
 | `fallback`   | Fallback to secondary if primary fails.  | `primary` (list), `secondary` (list)                    |
 | `ttl`        | Modifies response TTL.                   | `min` (int), `max` (int)                                |
+| `system`     | Uses the host's default DNS resolver.    | -                                                       |
 
 ## License
 

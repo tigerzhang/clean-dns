@@ -5,7 +5,7 @@ pub mod server;
 pub mod statistics;
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 // Re-export specific types if needed by main or tests
 pub use api::start_api_server;
@@ -28,6 +28,7 @@ pub fn create_plugin_registry(config: &Config) -> anyhow::Result<HashMap<String,
     use plugins::reject_plugin::RejectPlugin;
     use plugins::return_plugin::ReturnPlugin;
     use plugins::sequence::Sequence;
+    use plugins::system::System;
     use plugins::ttl::TtlPlugin;
 
     let mut registry: HashMap<String, SharedPlugin> = HashMap::new();
@@ -51,6 +52,7 @@ pub fn create_plugin_registry(config: &Config) -> anyhow::Result<HashMap<String,
             "if" => Arc::new(IfPlugin::new(plugin_conf.args.as_ref(), &registry)?),
             "return" => Arc::new(ReturnPlugin::new(plugin_conf.args.as_ref())?),
             "reject" => Arc::new(RejectPlugin::new(plugin_conf.args.as_ref())?),
+            "system" => Arc::new(System::new(plugin_conf.args.as_ref())?),
             "delay" => Arc::new(DelayPlugin::new(plugin_conf.args.as_ref())?),
             "fallback" => Arc::new(FallbackPlugin::new(plugin_conf.args.as_ref(), &registry)?),
             "ttl" => Arc::new(TtlPlugin::new(plugin_conf.args.as_ref())?),
