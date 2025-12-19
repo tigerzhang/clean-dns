@@ -73,7 +73,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_reject_NXDOMAIN() {
+    async fn test_reject_nxdomain() {
         let yaml = r#"
             rcode: 3
         "#;

@@ -61,7 +61,7 @@ impl Plugin for TtlPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hickory_proto::rr::{Name, Record, RecordType};
+    use hickory_proto::rr::{Name, Record};
     use std::str::FromStr;
     use std::sync::{Arc, RwLock};
 
