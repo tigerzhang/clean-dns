@@ -26,6 +26,11 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 url = "2.5"
 axum = "0.7"
 serde_json = "1.0"
+prost = "0.12"
+prost-types = "0.12"
+
+[build-dependencies]
+prost-build = "0.12"
 
 [dev-dependencies]
 tempfile = "3.23.0"

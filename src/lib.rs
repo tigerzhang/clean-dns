@@ -4,6 +4,10 @@ pub mod plugins;
 pub mod server;
 pub mod statistics;
 
+pub mod proto {
+    include!(concat!(env!("OUT_DIR"), "/clean_dns.proto.rs"));
+}
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -21,6 +25,7 @@ pub fn create_plugin_registry(config: &Config) -> anyhow::Result<HashMap<String,
     use plugins::domain_set::DomainSetPlugin;
     use plugins::fallback::FallbackPlugin;
     use plugins::forward::Forward;
+    use plugins::geosite::GeositePlugin;
     use plugins::hosts::Hosts;
     use plugins::if_plugin::IfPlugin;
     use plugins::ip_set::IpSetPlugin;
@@ -56,6 +61,7 @@ pub fn create_plugin_registry(config: &Config) -> anyhow::Result<HashMap<String,
             "delay" => Arc::new(DelayPlugin::new(plugin_conf.args.as_ref())?),
             "fallback" => Arc::new(FallbackPlugin::new(plugin_conf.args.as_ref(), &registry)?),
             "ttl" => Arc::new(TtlPlugin::new(plugin_conf.args.as_ref())?),
+            "geosite" => Arc::new(GeositePlugin::new(plugin_conf.args.as_ref())?),
             _ => {
                 tracing::warn!("Unknown plugin type: {}", type_);
                 continue;

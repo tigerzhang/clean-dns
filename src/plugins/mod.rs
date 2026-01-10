@@ -9,6 +9,7 @@ pub mod delay_plugin;
 pub mod domain_set;
 pub mod fallback;
 pub mod forward;
+pub mod geosite;
 pub mod hosts;
 pub mod if_plugin;
 pub mod ip_set;

@@ -32,10 +32,23 @@ The binary will be available at `target/release/clean-dns`.
 
 ## Usage
 
-Run CleanDNS with a configuration file:
+CleanDNS now supports multiple commands:
+
+### Start Server (Default)
 
 ```bash
+clean-dns run -c config.yaml
+# Or simply:
 clean-dns -c config.yaml
+```
+
+### Generate Geosite Data
+
+To use the `geosite` plugin, you must compile v2fly community data into a `geosite.dat` file:
+
+```bash
+# Assuming you have the data repo cloned at data/domain-list-community/data
+clean-dns make-geosite -s data/domain-list-community/data -o geosite.dat
 ```
 
 ## Configuration
@@ -130,6 +143,7 @@ plugins:
 | `if`         | Conditional execution.                   | `if` (matcher tag), `exec` (list), `else_exec` (list)   |
 | `matcher`    | Returns true if query matches criteria.  | `domain` (list), `client_ip` (list)                     |
 | `domain_set` | Loads domains from files.                | `files` (list)                                          |
+| `geosite`    | Loads domains from geosite.dat.          | `file` (path), `code` (str)                             |
 | `ip_set`     | Loads IPs/CIDRs from files.              | `files` (list)                                          |
 | `cache`      | Caches responses.                        | `size` (int), `exec` (list)                             |
 | `hosts`      | Static DNS records.                      | `hosts` (map)                                           |

@@ -1,4 +1,4 @@
-bind: "127.0.0.1:5335"
+bind: "127.0.0.1:53"
 api_port: 3002
 entry: main
 log:
@@ -11,6 +11,18 @@ plugins:
     args:
       files:
         - "proxy_domains.txt"
+
+  - tag: cn_list
+    type: geosite
+    args:
+      file: "geosite.dat"
+      code: "cn"
+
+  - tag: private_list
+    type: geosite
+    args:
+      file: "geosite.dat"
+      code: "private"
 
   # --- Actions ---
   # 1. Proxy Forwarder (DoH over SOCKS5)
@@ -52,6 +64,13 @@ plugins:
       domain:
         - "provider:proxy_list"
 
+  - tag: match_direct_domains
+    type: matcher
+    args:
+      domain:
+        - "provider:cn_list"
+        - "provider:private_list"
+
   - tag: fallback_group
     type: fallback
     args:
@@ -68,11 +87,13 @@ plugins:
   - tag: routing_logic
     type: if
     args:
-      if: "match_proxy_domains"
+      if: "match_direct_domains"
       exec:
-        - forward_proxy # Forward to Google via Proxy
-        - stop # Stop processing (don't fall through to local)
-      else_exec: [] # Continue to next step if not matched
+        - forward_local
+        - stop
+      else_exec:
+        - forward_proxy
+        - stop
 
   # --- Main Sequence ---
   - tag: main_sequence
