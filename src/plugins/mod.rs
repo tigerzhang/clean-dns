@@ -30,6 +30,7 @@ pub struct Context {
     pub request: Message,
     pub response: Option<Message>,
     pub abort: bool,
+    pub is_remote: bool,
     pub stats: Arc<RwLock<Statistics>>,
 }
 
@@ -40,6 +41,7 @@ impl Context {
             request,
             response: None,
             abort: false,
+            is_remote: false,
             stats,
         }
     }

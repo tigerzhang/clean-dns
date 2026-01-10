@@ -12,6 +12,7 @@ pub struct Statistics {
 pub struct DomainStats {
     pub count: usize,
     pub last_resolved_at: DateTime<Utc>,
+    pub last_resolved_remote: bool,
     pub ips: HashSet<IpAddr>,
     pub cache_hits: usize,
 }
@@ -25,6 +26,7 @@ impl Statistics {
         let entry = self.domains.entry(domain).or_insert(DomainStats {
             count: 0,
             last_resolved_at: Utc::now(),
+            last_resolved_remote: false,
             ips: HashSet::new(),
             cache_hits: 0,
         });
@@ -46,6 +48,7 @@ impl Statistics {
             let entry = self.domains.entry(domain).or_insert(DomainStats {
                 count: 0, // Did we count it as request? Yes, explicit record_request called in server.
                 last_resolved_at: Utc::now(),
+                last_resolved_remote: false,
                 ips: HashSet::new(),
                 cache_hits: 0,
             });
@@ -53,9 +56,10 @@ impl Statistics {
         }
     }
 
-    pub fn record_resolved_ip(&mut self, domain: &str, ip: IpAddr) {
+    pub fn record_resolved_ip(&mut self, domain: &str, ip: IpAddr, is_remote: bool) {
         if let Some(entry) = self.domains.get_mut(domain) {
             entry.ips.insert(ip);
+            entry.last_resolved_remote = is_remote;
         }
     }
 }
@@ -91,16 +95,20 @@ mod tests {
         stats.record_request("example.com.".to_string());
 
         let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-        stats.record_resolved_ip("example.com.", ip);
+        // Test local resolution
+        stats.record_resolved_ip("example.com.", ip, false);
 
         let entry = stats.domains.get("example.com.").unwrap();
         assert_eq!(entry.ips.len(), 1);
         assert!(entry.ips.contains(&ip));
+        assert_eq!(entry.last_resolved_remote, false);
 
-        // Duplicate IP should not increase count
-        stats.record_resolved_ip("example.com.", ip);
+        // Duplicate IP should not increase count, but update remote status?
+        // Logic says yes.
+        stats.record_resolved_ip("example.com.", ip, true);
 
         let entry = stats.domains.get("example.com.").unwrap();
         assert_eq!(entry.ips.len(), 1);
+        assert_eq!(entry.last_resolved_remote, true);
     }
 }

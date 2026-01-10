@@ -233,6 +233,7 @@ impl Plugin for Forward {
             Ok((response_bytes, _)) => {
                 let response = Message::from_vec(&response_bytes)?;
                 ctx.response = Some(response);
+                ctx.is_remote = self.socks5.is_some();
                 debug!("Forwarded request success");
             }
             Err(e) => {

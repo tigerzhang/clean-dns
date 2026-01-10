@@ -86,11 +86,19 @@ impl Server {
                         match rdata {
                             hickory_proto::rr::RData::A(ipv4) => {
                                 let mut s = stats.write().unwrap();
-                                s.record_resolved_ip(d, std::net::IpAddr::V4(ipv4.0));
+                                s.record_resolved_ip(
+                                    d,
+                                    std::net::IpAddr::V4(ipv4.0),
+                                    ctx.is_remote,
+                                );
                             }
                             hickory_proto::rr::RData::AAAA(ipv6) => {
                                 let mut s = stats.write().unwrap();
-                                s.record_resolved_ip(d, std::net::IpAddr::V6(ipv6.0));
+                                s.record_resolved_ip(
+                                    d,
+                                    std::net::IpAddr::V6(ipv6.0),
+                                    ctx.is_remote,
+                                );
                             }
                             _ => {}
                         }
