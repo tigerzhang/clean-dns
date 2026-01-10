@@ -47,7 +47,10 @@ clean-dns -c config.yaml
 To use the `geosite` plugin, you must compile v2fly community data into a `geosite.dat` file:
 
 ```bash
-# Assuming you have the data repo cloned at data/domain-list-community/data
+# Ensure submodules are initialized
+git submodule update --init --recursive
+
+# Compile the data
 clean-dns make-geosite -s data/domain-list-community/data -o geosite.dat
 ```
 
@@ -69,6 +72,12 @@ plugins:
     type: domain_set
     args:
       files: ["proxy_domains.txt"]
+
+  - tag: geosite_google
+    type: geosite
+    args:
+      file: "geosite.dat"
+      code: "google"
 
   # 2. Define Actions
   - tag: forward_proxy
@@ -99,7 +108,7 @@ plugins:
   - tag: match_proxy_domains
     type: matcher
     args:
-      domain: ["provider:proxy_list"]
+      domain: ["provider:proxy_list", "provider:geosite_google"]
 
   - tag: fallback_group
     type: fallback
@@ -175,12 +184,14 @@ Returns a JSON object containing usage statistics per domain.
     "google.com.": {
       "count": 12,
       "last_resolved_at": "2023-10-27T10:00:00Z",
+      "last_resolved_remote": true,
       "ips": ["142.250.1.100", "142.250.1.101"],
       "cache_hits": 5
     },
     "github.com.": {
       "count": 3,
       "last_resolved_at": "2023-10-27T10:05:00Z",
+      "last_resolved_remote": true,
       "ips": ["140.82.112.4"],
       "cache_hits": 0
     }
