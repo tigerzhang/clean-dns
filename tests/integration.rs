@@ -507,3 +507,145 @@ plugins:
         assert_eq!(stats.last_resolved_remote, true);
     }
 }
+
+#[tokio::test]
+async fn test_geosite_integration() {
+    use clean_dns::{
+        config::Config, create_plugin_registry, get_entry_plugin, server::Server,
+        statistics::Statistics,
+    };
+    use hickory_proto::op::{Message, MessageType, OpCode, Query};
+    use hickory_proto::rr::{Name, RecordType};
+    use std::io::Write;
+    use std::path::PathBuf;
+    use std::str::FromStr;
+    use std::sync::{Arc, RwLock};
+    use std::time::Duration;
+    use tempfile::NamedTempFile;
+    use tokio::net::UdpSocket;
+
+    // Locate geosite.dat in workspace root
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let geosite_path = manifest_dir.join("geosite.dat");
+    // Ensure it exists
+    assert!(
+        geosite_path.exists(),
+        "geosite.dat not found at {:?}",
+        geosite_path
+    );
+
+    let geosite_path_str = geosite_path.to_str().unwrap();
+
+    let mut config_file = NamedTempFile::new().unwrap();
+    let config_yaml = format!(
+        r#"
+bind: "127.0.0.1:0"
+api_port: 0
+entry: main
+plugins:
+  - tag: geosite_google
+    type: geosite
+    args:
+        file: "{}"
+        code: "google"
+  
+  - tag: reject_nx
+    type: reject
+    args:
+        rcode: 3 # NXDOMAIN
+
+  - tag: reject_refused
+    type: reject
+    args:
+        rcode: 5 # REFUSED
+
+  - tag: matcher_google
+    type: matcher
+    args:
+        domain: ["provider:geosite_google"]
+        exec: ["reject_nx"]
+
+  - tag: main
+    type: sequence
+    args:
+      exec: [matcher_google, reject_refused]
+"#,
+        geosite_path_str
+    );
+
+    writeln!(config_file, "{}", config_yaml).unwrap();
+
+    let mut config = Config::from_file(config_file.path().to_str().unwrap()).unwrap();
+    config.bind = "127.0.0.1:0".to_string();
+
+    let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = socket.local_addr().unwrap();
+    drop(socket);
+
+    let registry = create_plugin_registry(&config).unwrap();
+    let entry_plugin = get_entry_plugin(&config, &registry).unwrap();
+    let statistics = Arc::new(RwLock::new(Statistics::new()));
+
+    let server = Server::new(server_addr, entry_plugin, statistics.clone());
+    tokio::spawn(async move {
+        server.run().await.unwrap();
+    });
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let client_socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    client_socket.connect(server_addr).await.unwrap();
+
+    // 1. Query google.com -> Should match geosite:google -> matcher -> reject_nx (NXDOMAIN)
+    let mut msg = Message::new();
+    msg.set_id(1111);
+    msg.set_message_type(MessageType::Query);
+    msg.set_op_code(OpCode::Query);
+    msg.set_recursion_desired(true);
+    msg.add_query(Query::query(
+        Name::from_str("google.com.").unwrap(),
+        RecordType::A,
+    ));
+
+    client_socket.send(&msg.to_vec().unwrap()).await.unwrap();
+
+    let mut buf = [0u8; 512];
+    let (len, _) = tokio::time::timeout(Duration::from_secs(2), client_socket.recv_from(&mut buf))
+        .await
+        .expect("Timeout google")
+        .expect("Recv failed");
+
+    let response = Message::from_vec(&buf[..len]).unwrap();
+    assert_eq!(response.id(), 1111);
+    assert_eq!(
+        response.response_code(),
+        hickory_proto::op::ResponseCode::NXDomain,
+        "Expected NXDOMAIN for google.com"
+    );
+
+    // 2. Query example.com -> Should NOT match geosite:google -> matcher ignored -> reject_refused (REFUSED)
+    let mut msg = Message::new();
+    msg.set_id(2222);
+    msg.set_message_type(MessageType::Query);
+    msg.set_op_code(OpCode::Query);
+    msg.set_recursion_desired(true);
+    msg.add_query(Query::query(
+        Name::from_str("example.com.").unwrap(),
+        RecordType::A,
+    ));
+
+    client_socket.send(&msg.to_vec().unwrap()).await.unwrap();
+
+    let (len, _) = tokio::time::timeout(Duration::from_secs(2), client_socket.recv_from(&mut buf))
+        .await
+        .expect("Timeout example")
+        .expect("Recv failed");
+
+    let response = Message::from_vec(&buf[..len]).unwrap();
+    assert_eq!(response.id(), 2222);
+    assert_eq!(
+        response.response_code(),
+        hickory_proto::op::ResponseCode::Refused,
+        "Expected REFUSED for example.com"
+    );
+}
