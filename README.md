@@ -63,84 +63,119 @@ The configuration is YAML-based. You define a list of **plugins** and an **entry
 See `config.yaml` for a full example that routes Google/GitHub via a SOCKS5 proxy (DoH) and everything else to a local provider.
 
 ```yaml
-bind: "127.0.0.1:5335"
-api_port: 3002 # Optional: Port for the Statistics API (default: 3000)
+bind: "127.0.0.1:53"
+api_port: 3002
 entry: main
+log:
+  level: info
+
 plugins:
-  # 1. Define Data Sources
+  # --- Data Providers ---
   - tag: proxy_list
     type: domain_set
     args:
-      files: ["proxy_domains.txt"]
+      files:
+        - "proxy_domains.txt"
 
-  - tag: geosite_google
+  - tag: cn_list
     type: geosite
     args:
       file: "geosite.dat"
-      code: "google"
+      code: "cn"
 
-  # 2. Define Actions
+  - tag: private_list
+    type: geosite
+    args:
+      file: "geosite.dat"
+      code: "private"
+
+  # --- Actions ---
+  # 1. Proxy Forwarder (DoH over SOCKS5)
   - tag: forward_proxy
     type: forward
     args:
-      upstreams: ["https://8.8.8.8/dns-query"]
-      socks5: "127.0.0.1:1080"
+      upstreams:
+        - "https://8.8.8.8/dns-query"
+      socks5: "127.0.0.1:1080" # Tunnel DoH through local proxy
 
+  # 2. Default Forwarder (AliDNS for speed in CN)
   - tag: forward_local
     type: forward
     args:
-      upstreams: ["223.5.5.5:53"]
+      upstreams:
+        - "223.5.5.5:53"
 
+  # Backup Forwarder (Cloudflare)
   - tag: forward_backup
     type: forward
     args:
-      upstreams: ["1.1.1.1:53"]
+      upstreams:
+        - "114.114.114.114:53"
 
+  # System Resolver (Uses host's default DNS)
   - tag: forward_system
     type: system
     args: {}
 
+  # 3. Control Flow
   - tag: stop
     type: return
     args: {}
 
-  # 3. Matchers & Helpers
+  # --- Matchers ---
   - tag: match_proxy_domains
     type: matcher
     args:
-      domain: ["provider:proxy_list", "provider:geosite_google"]
+      domain:
+        - "provider:proxy_list"
+
+  - tag: match_direct_domains
+    type: matcher
+    args:
+      domain:
+        - "provider:cn_list"
+        - "provider:private_list"
 
   - tag: fallback_group
     type: fallback
     args:
-      primary: [forward_system]
-      secondary: [forward_local]
+      primary: forward_system # Use system default DNS first
+      secondary: forward_local # Fallback to AliDNS if system fails
 
   - tag: ttl_fix
     type: ttl
     args:
       min: 300
-      max: 3600
+      max: 600
 
-  # 4. Logic Layer
-  - tag: routing
+  # --- Logic ---
+  - tag: routing_logic
     type: if
     args:
-      if: "match_proxy_domains"
-      exec: [forward_proxy, stop]
-      else_exec: []
+      if: "match_direct_domains"
+      exec:
+        - forward_local
+        - stop
+      else_exec:
+        - forward_proxy
+        - stop
 
-  - tag: connection_logic
+  # --- Main Sequence ---
+  - tag: main_sequence
     type: sequence
     args:
-      exec: [routing, fallback_group, ttl_fix]
+      exec:
+        - routing_logic # 1. Check if needs proxy
+        - fallback_group # 2. Fallback to local DNS (with backup)
+        - ttl_fix
 
-  # 5. Entry Point (Cache -> Logic)
+  # --- Entry Point (Cache) ---
   - tag: main
     type: cache
     args:
-      size: 4096
-      exec: [connection_logic]
+      size: 10000
+      exec:
+        - main_sequence
 ```
 
 ### Supported Plugins
