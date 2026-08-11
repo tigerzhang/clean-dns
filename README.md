@@ -182,7 +182,7 @@ plugins:
 
 | Type         | Description                              | Args                                                    |
 | ------------ | ---------------------------------------- | ------------------------------------------------------- |
-| `forward`    | Forwards queries to upstream.            | `upstreams` (list), `concurrent` (int), `socks5` (addr) |
+| `forward`    | Forwards queries to upstream.            | `upstreams` (list), `concurrent` (int), `socks5` (addr), `retries` (int, extra attempts on same upstream), `retry_interval_ms` (int, default 100) |
 | `sequence`   | Executes a list of plugins in order.     | `exec` (list of tags)                                   |
 | `if`         | Conditional execution.                   | `if` (matcher tag), `exec` (list), `else_exec` (list)   |
 | `matcher`    | Returns true if query matches criteria.  | `domain` (list), `client_ip` (list)                     |

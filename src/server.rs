@@ -1,6 +1,6 @@
 use crate::plugins::{Context, SharedPlugin};
 use anyhow::Result;
-use hickory_proto::op::Message;
+use hickory_proto::op::{Message, MessageType, ResponseCode};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::UdpSocket;
@@ -44,7 +44,8 @@ impl Server {
                             Self::handle_request(socket_clone, &buf[..size], src, plugin, stats)
                                 .await
                         {
-                            error!("Failed to handle request: {}", e);
+                            // Full chain so root causes (SOCKS down, DoH timeout, etc.) are visible.
+                            error!("Failed to handle request: {:#}", e);
                         }
                     });
                 }
@@ -74,11 +75,21 @@ impl Server {
             None
         };
 
-        let mut ctx = Context::new(src, request, stats.clone());
+        let mut ctx = Context::new(src, request.clone(), stats.clone());
 
-        plugin.next(&mut ctx).await?;
+        let handle_result = plugin.next(&mut ctx).await;
 
-        if let Some(response) = ctx.response {
+        let response = match handle_result {
+            Ok(()) => ctx.response,
+            Err(e) => {
+                // Prefer answering with SERVFAIL over silent drop so clients don't hang
+                // until their own timeout when upstreams (e.g. DoH over SOCKS5) fail.
+                error!("Failed to handle request: {:#}", e);
+                Some(Self::servfail_response(&request))
+            }
+        };
+
+        if let Some(response) = response {
             // Record resolved IPs
             if let Some(d) = &domain {
                 for answer in response.answers() {
@@ -111,5 +122,19 @@ impl Server {
         }
 
         Ok(())
+    }
+
+    fn servfail_response(request: &Message) -> Message {
+        let mut response = Message::new();
+        response.set_id(request.id());
+        response.set_message_type(MessageType::Response);
+        response.set_op_code(request.op_code());
+        response.set_recursion_desired(request.recursion_desired());
+        response.set_recursion_available(true);
+        response.set_response_code(ResponseCode::ServFail);
+        for query in request.queries() {
+            response.add_query(query.clone());
+        }
+        response
     }
 }

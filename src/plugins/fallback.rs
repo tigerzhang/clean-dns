@@ -48,15 +48,29 @@ impl Plugin for FallbackPlugin {
     }
 
     async fn next(&self, ctx: &mut Context) -> Result<()> {
-        if let Err(e) = self.primary.next(ctx).await {
-            warn!(
-                "Primary plugin {} failed: {}. Switching to secondary.",
-                self.primary.name(),
-                e
-            );
-            self.secondary.next(ctx).await
-        } else {
-            Ok(())
+        // Already answered or aborted by an earlier stage — nothing to do.
+        if ctx.response.is_some() || ctx.abort {
+            return Ok(());
+        }
+
+        match self.primary.next(ctx).await {
+            Ok(()) if ctx.response.is_some() || ctx.abort => Ok(()),
+            Ok(()) => {
+                // Primary soft-failed (e.g. system resolver) with no answer.
+                warn!(
+                    "Primary plugin {} produced no response. Switching to secondary.",
+                    self.primary.name()
+                );
+                self.secondary.next(ctx).await
+            }
+            Err(e) => {
+                warn!(
+                    "Primary plugin {} failed: {:#}. Switching to secondary.",
+                    self.primary.name(),
+                    e
+                );
+                self.secondary.next(ctx).await
+            }
         }
     }
 }
@@ -68,6 +82,8 @@ mod tests {
 
     struct MockPlugin {
         fail: bool,
+        /// When true, sets a dummy response so fallback treats this as a real answer.
+        produce_response: bool,
         called: Arc<Mutex<bool>>,
     }
 
@@ -76,11 +92,14 @@ mod tests {
         fn name(&self) -> &str {
             "mock"
         }
-        async fn next(&self, _ctx: &mut Context) -> Result<()> {
+        async fn next(&self, ctx: &mut Context) -> Result<()> {
             *self.called.lock().unwrap() = true;
             if self.fail {
                 Err(anyhow::anyhow!("Mock fail"))
             } else {
+                if self.produce_response {
+                    ctx.response = Some(hickory_proto::op::Message::new());
+                }
                 Ok(())
             }
         }
@@ -103,11 +122,13 @@ mod tests {
         let p1_called = Arc::new(Mutex::new(false));
         let p1 = Arc::new(MockPlugin {
             fail: false,
+            produce_response: true,
             called: p1_called.clone(),
         });
         let p2_called = Arc::new(Mutex::new(false));
         let p2 = Arc::new(MockPlugin {
             fail: false,
+            produce_response: true,
             called: p2_called.clone(),
         });
 
@@ -127,6 +148,7 @@ mod tests {
 
         assert!(*p1_called.lock().unwrap());
         assert!(!*p2_called.lock().unwrap());
+        assert!(ctx.response.is_some());
     }
 
     #[tokio::test]
@@ -134,11 +156,13 @@ mod tests {
         let p1_called = Arc::new(Mutex::new(false));
         let p1 = Arc::new(MockPlugin {
             fail: true,
+            produce_response: false,
             called: p1_called.clone(),
         });
         let p2_called = Arc::new(Mutex::new(false));
         let p2 = Arc::new(MockPlugin {
             fail: false,
+            produce_response: true,
             called: p2_called.clone(),
         });
 
@@ -158,5 +182,41 @@ mod tests {
 
         assert!(*p1_called.lock().unwrap());
         assert!(*p2_called.lock().unwrap());
+        assert!(ctx.response.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_fallback_no_response() {
+        // Primary returns Ok but no answer → secondary must run.
+        let p1_called = Arc::new(Mutex::new(false));
+        let p1 = Arc::new(MockPlugin {
+            fail: false,
+            produce_response: false,
+            called: p1_called.clone(),
+        });
+        let p2_called = Arc::new(Mutex::new(false));
+        let p2 = Arc::new(MockPlugin {
+            fail: false,
+            produce_response: true,
+            called: p2_called.clone(),
+        });
+
+        let mut registry: HashMap<String, SharedPlugin> = HashMap::new();
+        registry.insert("p1".to_string(), p1);
+        registry.insert("p2".to_string(), p2);
+
+        let yaml = r#"
+            primary: p1
+            secondary: p2
+        "#;
+        let config: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let plugin = FallbackPlugin::new(Some(&config), &registry).unwrap();
+
+        let mut ctx = make_ctx();
+        plugin.next(&mut ctx).await.unwrap();
+
+        assert!(*p1_called.lock().unwrap());
+        assert!(*p2_called.lock().unwrap());
+        assert!(ctx.response.is_some());
     }
 }

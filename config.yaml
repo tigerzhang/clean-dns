@@ -32,6 +32,9 @@ plugins:
       upstreams:
         - "https://8.8.8.8/dns-query"
       socks5: "127.0.0.1:1080" # Tunnel DoH through local proxy
+      retries: 2
+      retry_interval_ms: 250
+      reset_after_failures: 2
 
   # 2. Default Forwarder (AliDNS for speed in CN)
   - tag: forward_local
