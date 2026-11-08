@@ -37,6 +37,15 @@ struct ForwardConfig {
     /// Default 2. Set to 0 to disable this recovery.
     #[serde(default = "default_reset_after_failures")]
     reset_after_failures: u32,
+    /// Total timeout for one upstream attempt, in milliseconds. Default 5000.
+    #[serde(default = "default_timeout_ms")]
+    timeout_ms: u64,
+    /// TCP/TLS connect timeout in milliseconds.
+    /// When unset, only `timeout_ms` applies.
+    /// Set this on a SOCKS5 DoH forwarder so an unreachable proxy or upstream
+    /// fails quickly and a later fallback can answer.
+    #[serde(default)]
+    connect_timeout_ms: Option<u64>,
 }
 
 fn default_concurrent() -> u32 {
@@ -49,6 +58,10 @@ fn default_retry_interval_ms() -> u64 {
 
 fn default_reset_after_failures() -> u32 {
     2
+}
+
+fn default_timeout_ms() -> u64 {
+    5000
 }
 
 #[derive(Clone, Debug)]
@@ -70,6 +83,8 @@ pub struct Forward {
     retry_interval: Duration,
     reset_after_failures: u32,
     consecutive_doh_failures: AtomicU32,
+    timeout: Duration,
+    connect_timeout: Option<Duration>,
 }
 
 impl Forward {
@@ -106,7 +121,12 @@ impl Forward {
             (None, None)
         };
 
-        let client = Self::build_client(socks5_str.as_deref())?;
+        let timeout = Duration::from_millis(config.timeout_ms.max(1));
+        let connect_timeout = config
+            .connect_timeout_ms
+            .map(|ms| Duration::from_millis(ms.max(1)));
+
+        let client = Self::build_client(socks5_str.as_deref(), timeout, connect_timeout)?;
 
         Ok(Self {
             upstreams,
@@ -118,14 +138,23 @@ impl Forward {
             retry_interval: Duration::from_millis(config.retry_interval_ms),
             reset_after_failures: config.reset_after_failures,
             consecutive_doh_failures: AtomicU32::new(0),
+            timeout,
+            connect_timeout,
         })
     }
 
     /// Build a fresh reqwest Client. A new Client starts with an empty connection
     /// pool, so any prior SOCKS/TLS sockets held by the previous client are
     /// released once outstanding clones finish.
-    fn build_client(socks5: Option<&str>) -> Result<Client> {
-        let mut builder = Client::builder().timeout(Duration::from_secs(5));
+    fn build_client(
+        socks5: Option<&str>,
+        timeout: Duration,
+        connect_timeout: Option<Duration>,
+    ) -> Result<Client> {
+        let mut builder = Client::builder().timeout(timeout);
+        if let Some(connect_timeout) = connect_timeout {
+            builder = builder.connect_timeout(connect_timeout);
+        }
 
         if let Some(s) = socks5 {
             // Note: applies to ALL DoH requests from this plugin instance.
@@ -140,7 +169,11 @@ impl Forward {
     /// Replace the shared DoH client so the next request opens new connections
     /// instead of reusing a stale/broken pool entry through the proxy.
     fn rebuild_client(&self) -> Result<()> {
-        let client = Self::build_client(self.socks5_str.as_deref())?;
+        let client = Self::build_client(
+            self.socks5_str.as_deref(),
+            self.timeout,
+            self.connect_timeout,
+        )?;
         match self.client.write() {
             Ok(mut guard) => {
                 *guard = client;
@@ -278,7 +311,7 @@ impl Forward {
     }
 
     async fn exchange_udp(&self, upstream: SocketAddr, request_bytes: Vec<u8>) -> Result<Vec<u8>> {
-        let result = tokio::time::timeout(Duration::from_secs(5), async {
+        let result = tokio::time::timeout(self.timeout, async {
             if let Some(proxy_addr) = self.socks5 {
                 // TCP via SOCKS5
                 let mut stream = Socks5Stream::connect(proxy_addr, upstream)
@@ -426,6 +459,8 @@ mod tests {
         assert_eq!(forward.upstreams.len(), 3); // 1 from addr, 2 from upstreams
         assert_eq!(forward.retries, 0);
         assert_eq!(forward.retry_interval, Duration::from_millis(100));
+        assert_eq!(forward.timeout, Duration::from_secs(5));
+        assert!(forward.connect_timeout.is_none());
     }
 
     #[test]
@@ -440,6 +475,21 @@ mod tests {
         let forward = Forward::new(Some(&config)).unwrap();
         assert_eq!(forward.retries, 2);
         assert_eq!(forward.retry_interval, Duration::from_millis(250));
+    }
+
+    #[test]
+    fn test_timeout_config_parsing() {
+        let yaml = r#"
+            upstreams:
+              - "https://8.8.8.8/dns-query"
+            socks5: "127.0.0.1:1080"
+            timeout_ms: 3000
+            connect_timeout_ms: 1500
+        "#;
+        let config: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let forward = Forward::new(Some(&config)).unwrap();
+        assert_eq!(forward.timeout, Duration::from_millis(3000));
+        assert_eq!(forward.connect_timeout, Some(Duration::from_millis(1500)));
     }
 
     #[test]

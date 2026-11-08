@@ -60,7 +60,7 @@ The configuration is YAML-based. You define a list of **plugins** and an **entry
 
 ### Example: Split Routing (Proxy + Local)
 
-See `config.yaml` for a full example that routes Google/GitHub via a SOCKS5 proxy (DoH) and everything else to a local provider.
+See `config.yaml` for a full example. Non-CN domains go through DoH over a SOCKS5 proxy. If that proxy or upstream is unreachable, the query falls through to local DNS, then the backup forwarder, then the host resolver. CN and private domains start at local DNS and use the same later fallbacks.
 
 ```yaml
 bind: "127.0.0.1:53"
@@ -97,6 +97,10 @@ plugins:
       upstreams:
         - "https://8.8.8.8/dns-query"
       socks5: "127.0.0.1:1080" # Tunnel DoH through local proxy
+      retries: 2
+      retry_interval_ms: 250
+      reset_after_failures: 2
+      connect_timeout_ms: 1500
 
   # 2. Default Forwarder (AliDNS for speed in CN)
   - tag: forward_local
@@ -136,11 +140,24 @@ plugins:
         - "provider:cn_list"
         - "provider:private_list"
 
-  - tag: fallback_group
+  # Non-CN domains: DoH via SOCKS5, then local DNS, then backup, then the host resolver.
+  - tag: forward_proxy_chain
     type: fallback
     args:
-      primary: forward_system # Use system default DNS first
-      secondary: forward_local # Fallback to AliDNS if system fails
+      exec:
+        - forward_proxy
+        - forward_local
+        - forward_backup
+        - forward_system
+
+  # CN / private domains: local DNS, then backup, then the host resolver.
+  - tag: forward_direct_chain
+    type: fallback
+    args:
+      exec:
+        - forward_local
+        - forward_backup
+        - forward_system
 
   - tag: ttl_fix
     type: ttl
@@ -154,19 +171,16 @@ plugins:
     args:
       if: "match_direct_domains"
       exec:
-        - forward_local
-        - stop
+        - forward_direct_chain
       else_exec:
-        - forward_proxy
-        - stop
+        - forward_proxy_chain
 
   # --- Main Sequence ---
   - tag: main_sequence
     type: sequence
     args:
       exec:
-        - routing_logic # 1. Check if needs proxy
-        - fallback_group # 2. Fallback to local DNS (with backup)
+        - routing_logic # 1. Proxy chain, or local chain for CN/private
         - ttl_fix
 
   # --- Entry Point (Cache) ---
@@ -182,7 +196,7 @@ plugins:
 
 | Type         | Description                              | Args                                                    |
 | ------------ | ---------------------------------------- | ------------------------------------------------------- |
-| `forward`    | Forwards queries to upstream.            | `upstreams` (list), `concurrent` (int), `socks5` (addr), `retries` (int, extra attempts on same upstream), `retry_interval_ms` (int, default 100) |
+| `forward`    | Forwards queries to upstream.            | `upstreams` (list), `concurrent` (int), `socks5` (addr), `retries` (int, extra attempts on same upstream), `retry_interval_ms` (int, default 100), `timeout_ms` (int, default 5000), `connect_timeout_ms` (int, optional TCP/TLS connect limit) |
 | `sequence`   | Executes a list of plugins in order.     | `exec` (list of tags)                                   |
 | `if`         | Conditional execution.                   | `if` (matcher tag), `exec` (list), `else_exec` (list)   |
 | `matcher`    | Returns true if query matches criteria.  | `domain` (list), `client_ip` (list)                     |
@@ -194,7 +208,7 @@ plugins:
 | `reject`     | Rejects the query.                       | `rcode` (int)                                           |
 | `delay`      | Delays execution (debug/testing).        | `ms` (int)                                              |
 | `return`     | Stops execution in the current sequence. | -                                                       |
-| `fallback`   | Fallback to secondary if primary fails.  | `primary` (list), `secondary` (list)                    |
+| `fallback`   | Try plugins in order until one answers.  | `exec` (ordered tags), or `primary` (tag) plus `secondary` (tag or list of tags) |
 | `ttl`        | Modifies response TTL.                   | `min` (int), `max` (int)                                |
 | `system`     | Uses the host's default DNS resolver.    | -                                                       |
 

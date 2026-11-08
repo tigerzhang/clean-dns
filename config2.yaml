@@ -1,0 +1,130 @@
+bind: "127.0.0.1:5354"
+api_port: 13002
+entry: main
+log:
+  level: info
+
+plugins:
+  # --- Data Providers ---
+  - tag: proxy_list
+    type: domain_set
+    args:
+      files:
+        - "proxy_domains.txt"
+
+  - tag: cn_list
+    type: geosite
+    args:
+      file: "geosite.dat"
+      code: "cn"
+
+  - tag: private_list
+    type: geosite
+    args:
+      file: "geosite.dat"
+      code: "private"
+
+  # --- Actions ---
+  # 1. Proxy Forwarder (DoH over SOCKS5)
+  - tag: forward_proxy
+    type: forward
+    args:
+      upstreams:
+        - "https://8.8.8.8/dns-query"
+      socks5: "127.0.0.1:1080" # Tunnel DoH through local proxy
+      retries: 2
+      retry_interval_ms: 250
+      reset_after_failures: 2
+      # Fail the TCP/TLS connect quickly when the proxy or DoH upstream is down
+      # so forward_proxy_chain can answer from local DNS.
+      connect_timeout_ms: 1500
+
+  # 2. Default Forwarder (AliDNS for speed in CN)
+  - tag: forward_local
+    type: forward
+    args:
+      upstreams:
+        - "223.5.5.5:53"
+
+  # Backup Forwarder (Cloudflare)
+  - tag: forward_backup
+    type: forward
+    args:
+      upstreams:
+        - "114.114.114.114:53"
+
+  # System Resolver (Uses host's default DNS)
+  - tag: forward_system
+    type: system
+    args: {}
+
+  # 3. Control Flow
+  - tag: stop
+    type: return
+    args: {}
+
+  # --- Matchers ---
+  - tag: match_proxy_domains
+    type: matcher
+    args:
+      domain:
+        - "provider:proxy_list"
+
+  - tag: match_direct_domains
+    type: matcher
+    args:
+      domain:
+        - "provider:cn_list"
+        - "provider:private_list"
+
+  # Non-CN domains: DoH via SOCKS5, then local DNS if the proxy or upstream
+  # is unreachable, then the backup forwarder, then the host resolver.
+  - tag: forward_proxy_chain
+    type: fallback
+    args:
+      exec:
+        - forward_proxy
+        - forward_local
+        - forward_backup
+        - forward_system
+
+  # CN / private domains: local DNS, then backup, then the host resolver.
+  - tag: forward_direct_chain
+    type: fallback
+    args:
+      exec:
+        - forward_local
+        - forward_backup
+        - forward_system
+
+  - tag: ttl_fix
+    type: ttl
+    args:
+      min: 300
+      max: 600
+
+  # --- Logic ---
+  - tag: routing_logic
+    type: if
+    args:
+      if: "match_direct_domains"
+      exec:
+        - forward_direct_chain
+      else_exec:
+        - forward_proxy_chain
+
+  # --- Main Sequence ---
+  - tag: main_sequence
+    type: sequence
+    args:
+      exec:
+        - routing_logic # 1. Proxy chain, or local chain for CN/private
+        - ttl_fix
+
+  # --- Entry Point (Cache) ---
+  - tag: main
+    type: cache
+    args:
+      size: 10000
+      exec:
+        - main_sequence

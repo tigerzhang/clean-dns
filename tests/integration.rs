@@ -649,3 +649,228 @@ plugins:
         "Expected REFUSED for example.com"
     );
 }
+
+async fn answer_udp(socket: tokio::net::UdpSocket, ip: std::net::Ipv4Addr) {
+    use hickory_proto::op::{Message, MessageType, ResponseCode};
+    use hickory_proto::rr::{RData, Record};
+
+    let mut buf = [0u8; 512];
+    loop {
+        let Ok((len, src)) = socket.recv_from(&mut buf).await else {
+            break;
+        };
+        let Ok(request) = Message::from_vec(&buf[..len]) else {
+            continue;
+        };
+        let Some(query) = request.query() else {
+            continue;
+        };
+        let mut response = Message::new();
+        response.set_id(request.id());
+        response.set_message_type(MessageType::Response);
+        response.set_recursion_available(true);
+        response.set_recursion_desired(request.recursion_desired());
+        response.set_response_code(ResponseCode::NoError);
+        response.add_query(query.clone());
+        response.add_answer(Record::from_rdata(
+            query.name().clone(),
+            60,
+            RData::A(hickory_proto::rr::rdata::A(ip)),
+        ));
+        let _ = socket.send_to(&response.to_vec().unwrap(), src).await;
+    }
+}
+
+fn start_dns_server(
+    config_yaml: &str,
+) -> (
+    std::net::SocketAddr,
+    std::sync::Arc<std::sync::RwLock<clean_dns::Statistics>>,
+) {
+    use clean_dns::{
+        config::Config, create_plugin_registry, get_entry_plugin, server::Server,
+        statistics::Statistics,
+    };
+    use std::io::Write;
+    use std::sync::{Arc, RwLock};
+    use tempfile::NamedTempFile;
+
+    let mut config_file = NamedTempFile::new().unwrap();
+    writeln!(config_file, "{config_yaml}").unwrap();
+    // Keep the file alive for the process; the path is read once here.
+    let mut config = Config::from_file(config_file.path().to_str().unwrap()).unwrap();
+    config.bind = "127.0.0.1:0".to_string();
+
+    let socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    let server_addr = socket.local_addr().unwrap();
+    drop(socket);
+
+    let registry = create_plugin_registry(&config).unwrap();
+    let entry_plugin = get_entry_plugin(&config, &registry).unwrap();
+    let statistics = Arc::new(RwLock::new(Statistics::new()));
+    let server = Server::new(server_addr, entry_plugin, statistics.clone());
+    tokio::spawn(async move {
+        server.run().await.unwrap();
+    });
+    // NamedTempFile drops here. Config::from_file already finished reading it.
+    (server_addr, statistics)
+}
+
+async fn query_a(server: std::net::SocketAddr, name: &str, id: u16) -> hickory_proto::op::Message {
+    use hickory_proto::op::{Message, MessageType, OpCode, Query};
+    use hickory_proto::rr::{Name, RecordType};
+    use std::str::FromStr;
+    use std::time::Duration;
+    use tokio::net::UdpSocket;
+
+    let client = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    client.connect(server).await.unwrap();
+
+    let mut msg = Message::new();
+    msg.set_id(id);
+    msg.set_message_type(MessageType::Query);
+    msg.set_op_code(OpCode::Query);
+    msg.set_recursion_desired(true);
+    msg.add_query(Query::query(Name::from_str(name).unwrap(), RecordType::A));
+    client.send(&msg.to_vec().unwrap()).await.unwrap();
+
+    let mut buf = [0u8; 512];
+    let (len, _) = tokio::time::timeout(Duration::from_secs(2), client.recv_from(&mut buf))
+        .await
+        .expect("Timeout waiting for DNS response")
+        .expect("Recv failed");
+    Message::from_vec(&buf[..len]).unwrap()
+}
+
+#[tokio::test]
+async fn test_config_yaml_loads_fallback_chains() {
+    use clean_dns::{create_plugin_registry, get_entry_plugin, Config};
+    use std::path::PathBuf;
+
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("config.yaml");
+    let config = Config::from_file(path.to_str().unwrap()).unwrap();
+    let registry = create_plugin_registry(&config).unwrap();
+    get_entry_plugin(&config, &registry).unwrap();
+    assert!(registry.contains_key("forward_proxy_chain"));
+    assert!(registry.contains_key("forward_direct_chain"));
+    assert!(registry.contains_key("forward_system"));
+}
+
+#[tokio::test]
+async fn test_unreachable_proxy_falls_back_to_local_dns() {
+    use hickory_proto::op::ResponseCode;
+    use hickory_proto::rr::RData;
+    use std::net::Ipv4Addr;
+    use std::time::Duration;
+    use tokio::net::{TcpListener, UdpSocket};
+
+    let dns = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let dns_addr = dns.local_addr().unwrap();
+    tokio::spawn(answer_udp(dns, Ipv4Addr::new(9, 9, 9, 9)));
+
+    // Closed port: connect is refused, same as a SOCKS5 proxy that is down.
+    let closed = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let closed_addr = closed.local_addr().unwrap();
+    drop(closed);
+
+    let config_yaml = format!(
+        r#"
+bind: "127.0.0.1:0"
+api_port: 0
+entry: main
+plugins:
+  - tag: forward_proxy
+    type: forward
+    args:
+      upstreams: ["https://8.8.8.8/dns-query"]
+      socks5: "{closed}"
+      retries: 0
+      connect_timeout_ms: 300
+      timeout_ms: 500
+  - tag: forward_local
+    type: forward
+    args:
+      upstreams: ["{dns}"]
+      timeout_ms: 1000
+  - tag: forward_proxy_chain
+    type: fallback
+    args:
+      exec:
+        - forward_proxy
+        - forward_local
+  - tag: main
+    type: sequence
+    args:
+      exec: [forward_proxy_chain]
+"#,
+        closed = closed_addr,
+        dns = dns_addr,
+    );
+
+    let (server_addr, _) = start_dns_server(&config_yaml);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let response = query_a(server_addr, "example.com.", 4242).await;
+    assert_eq!(response.id(), 4242);
+    assert_eq!(response.response_code(), ResponseCode::NoError);
+    let answer = response.answers().first().expect("missing local answer");
+    match answer.data() {
+        Some(RData::A(ip)) => assert_eq!(ip.0, Ipv4Addr::new(9, 9, 9, 9)),
+        other => panic!("expected A 9.9.9.9, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn test_failed_forwarders_return_servfail() {
+    use hickory_proto::op::ResponseCode;
+    use std::time::Duration;
+    use tokio::net::UdpSocket;
+
+    // Nothing is listening, so each UDP attempt hits timeout_ms.
+    let dead_a = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let dead_a_addr = dead_a.local_addr().unwrap();
+    drop(dead_a);
+    let dead_b = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let dead_b_addr = dead_b.local_addr().unwrap();
+    drop(dead_b);
+
+    let config_yaml = format!(
+        r#"
+bind: "127.0.0.1:0"
+api_port: 0
+entry: main
+plugins:
+  - tag: forward_local
+    type: forward
+    args:
+      upstreams: ["{dead_a}"]
+      retries: 0
+      timeout_ms: 200
+  - tag: forward_backup
+    type: forward
+    args:
+      upstreams: ["{dead_b}"]
+      retries: 0
+      timeout_ms: 200
+  - tag: chain
+    type: fallback
+    args:
+      exec:
+        - forward_local
+        - forward_backup
+  - tag: main
+    type: sequence
+    args:
+      exec: [chain]
+"#,
+        dead_a = dead_a_addr,
+        dead_b = dead_b_addr,
+    );
+
+    let (server_addr, _) = start_dns_server(&config_yaml);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let response = query_a(server_addr, "example.com.", 4343).await;
+    assert_eq!(response.id(), 4343);
+    assert_eq!(response.response_code(), ResponseCode::ServFail);
+}
